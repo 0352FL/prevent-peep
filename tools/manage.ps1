@@ -18,6 +18,7 @@ function Get-Defaults {
         denyRoots    = @()
         scanShell    = $true
         alertSound   = $true
+        alertCustom  = $true
         alertToast   = $true
         alertPopup   = $true
         relativeBase = ''
@@ -48,6 +49,7 @@ function Write-State($state) {
         denyRoots    = @($state.denyRoots | Where-Object { $_ })
         scanShell    = [bool]$state.scanShell
         alertSound   = [bool]$state.alertSound
+        alertCustom  = [bool]$state.alertCustom
         alertToast   = [bool]$state.alertToast
         alertPopup   = [bool]$state.alertPopup
     }
@@ -372,7 +374,7 @@ function Remove-Selected($listBox) {
 $state = Read-State
 
 $form = New-Object System.Windows.Forms.Form
-$form.Text = 'Prevent-peep — 大肥鱼安全助手'
+$form.Text = 'Prevent-peep — 大肥鱼文件夹防窥眼罩'
 $form.ClientSize = New-Object System.Drawing.Size(920, 774)
 $form.StartPosition = 'CenterScreen'
 $form.BackColor = $C_BG
@@ -407,7 +409,7 @@ $header.BackColor = $C_HEADER
 $header.Region = New-Object System.Drawing.Region -ArgumentList (New-TopRoundedPath 920 44 18)
 $form.Controls.Add($header)
 
-$null = New-Label $header 'Prevent-peep · 大肥鱼安全助手' 20 12 400 24 11 $C_HEADER2 $true
+$null = New-Label $header 'Prevent-peep · 大肥鱼文件夹防窥眼罩' 20 12 460 24 11 $C_HEADER2 $true
 
 $closeBtn = New-Object System.Windows.Forms.Button
 $closeBtn.Text = '✕'
@@ -492,14 +494,15 @@ $modeBox.Font = New-Object System.Drawing.Font($fontName, 9)
 $modeBox.SelectedIndex = if ($state.mode -eq 'deny') { 1 } else { 0 }
 $form.Controls.Add($modeBox)
 
-$scanBox = New-Toggle $form '扫描 pwsh 命令串（启发式）' 620 560 ([bool]$state.scanShell) { Invoke-Save }
-$soundBox = New-Toggle $form '声音提醒' 620 586 ([bool]$state.alertSound) { Invoke-Save }
-$toastBox = New-Toggle $form '弹窗提醒（托盘气泡）' 620 612 ([bool]$state.alertToast) { Invoke-Save }
-$popupBox = New-Toggle $form '确认弹窗提醒' 620 638 ([bool]$state.alertPopup) { Invoke-Save }
+$scanBox = New-Toggle $form '扫描push命令串（启发式）' 620 550 ([bool]$state.scanShell) { Invoke-Save }
+$soundBox = New-Toggle $form '声音提醒' 620 574 ([bool]$state.alertSound) { Invoke-Save }
+$customBox = New-Toggle $form '自制弹窗提醒' 620 598 ([bool]$state.alertCustom) { Invoke-Save }
+$toastBox = New-Toggle $form '系统弹窗提醒' 620 622 ([bool]$state.alertToast) { Invoke-Save }
+$popupBox = New-Toggle $form '确认弹窗提醒' 620 646 ([bool]$state.alertPopup) { Invoke-Save }
 
-$null = New-Label $form '相对路径基准（可选）' 620 664 260 20 9 $C_MUTED $false
+$null = New-Label $form '相对路径基准（可选）' 620 672 260 18 9 $C_MUTED $false
 $baseBox = New-Object System.Windows.Forms.TextBox
-$baseBox.Location = New-Object System.Drawing.Point(620, 684)
+$baseBox.Location = New-Object System.Drawing.Point(620, 690)
 $baseBox.Size = New-Object System.Drawing.Size(256, 24)
 $baseBox.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
 $baseBox.Font = New-Object System.Drawing.Font($fontName, 9)
@@ -538,6 +541,7 @@ function Invoke-Save {
         denyRoots    = @($denyList.Items | ForEach-Object { [string]$_ })
         scanShell    = [bool]$scanBox.Tag
         alertSound   = [bool]$soundBox.Tag
+        alertCustom  = [bool]$customBox.Tag
         alertToast   = [bool]$toastBox.Tag
         alertPopup   = [bool]$popupBox.Tag
         relativeBase = [string]$baseBox.Text
