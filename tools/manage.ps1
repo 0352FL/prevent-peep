@@ -19,6 +19,7 @@ function Get-Defaults {
         scanShell    = $true
         alertSound   = $true
         alertToast   = $true
+        alertPopup   = $true
         relativeBase = ''
     }
 }
@@ -48,6 +49,7 @@ function Write-State($state) {
         scanShell    = [bool]$state.scanShell
         alertSound   = [bool]$state.alertSound
         alertToast   = [bool]$state.alertToast
+        alertPopup   = [bool]$state.alertPopup
     }
     if ($state.relativeBase) { $out.relativeBase = [string]$state.relativeBase }
     if (-not (Test-Path -LiteralPath $stateDir)) { New-Item -ItemType Directory -Path $stateDir -Force | Out-Null }
@@ -489,20 +491,21 @@ $modeBox.Font = New-Object System.Drawing.Font($fontName, 9)
 $modeBox.SelectedIndex = if ($state.mode -eq 'deny') { 1 } else { 0 }
 $form.Controls.Add($modeBox)
 
-$scanBox = New-Toggle $form '扫描 pwsh 命令串（启发式）' 620 566 ([bool]$state.scanShell)
-$soundBox = New-Toggle $form '触发时播放提示音' 620 594 ([bool]$state.alertSound)
-$toastBox = New-Toggle $form '触发时弹出 Windows 托盘通知' 620 622 ([bool]$state.alertToast)
+$scanBox = New-Toggle $form '扫描 pwsh 命令串（启发式）' 620 560 ([bool]$state.scanShell)
+$soundBox = New-Toggle $form '触发时播放提示音' 620 586 ([bool]$state.alertSound)
+$toastBox = New-Toggle $form '触发时弹出托盘气泡' 620 612 ([bool]$state.alertToast)
+$popupBox = New-Toggle $form '触发时弹窗（需点确认）' 620 638 ([bool]$state.alertPopup)
 
-$null = New-Label $form '相对路径基准（可选）' 620 650 260 22 9 $C_MUTED $false
+$null = New-Label $form '相对路径基准（可选）' 620 668 260 22 9 $C_MUTED $false
 $baseBox = New-Object System.Windows.Forms.TextBox
-$baseBox.Location = New-Object System.Drawing.Point(620, 670)
+$baseBox.Location = New-Object System.Drawing.Point(620, 688)
 $baseBox.Size = New-Object System.Drawing.Size(256, 26)
 $baseBox.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
 $baseBox.Font = New-Object System.Drawing.Font($fontName, 9)
 $baseBox.Text = [string]$state.relativeBase
 $form.Controls.Add($baseBox)
 
-$openButton = New-Button $form '打开配置文件' 620 712 140 34 $false
+$openButton = New-Button $form '打开配置文件' 620 726 140 34 $false
 
 # ---------- 底部 ----------
 $hintLabel = New-Label $form '提示：黑名单优先于白名单；受管根之外的路径不受检查。' 26 800 470 20 8.5 $C_MUTED $false
@@ -535,6 +538,7 @@ $saveButton.Add_Click({
         scanShell    = [bool]$scanBox.Tag
         alertSound   = [bool]$soundBox.Tag
         alertToast   = [bool]$toastBox.Tag
+        alertPopup   = [bool]$popupBox.Tag
         relativeBase = [string]$baseBox.Text
     }
     try {
