@@ -76,8 +76,8 @@ try { $null = New-Object System.Drawing.Font($fontName, 9) } catch { $fontName =
 # 卡片矩形（同时用于烘焙进背景与摆放控件）
 $cardA = New-Object System.Drawing.Rectangle(20, 164, 430, 300)
 $cardB = New-Object System.Drawing.Rectangle(470, 164, 430, 300)
-$cardC = New-Object System.Drawing.Rectangle(20, 480, 560, 302)
-$cardD = New-Object System.Drawing.Rectangle(600, 480, 300, 302)
+$cardC = New-Object System.Drawing.Rectangle(20, 480, 560, 250)
+$cardD = New-Object System.Drawing.Rectangle(600, 480, 300, 250)
 $cards = @($cardA, $cardB, $cardC, $cardD)
 
 # ---------- 拖动窗口（无边框） ----------
@@ -309,7 +309,7 @@ function New-ListBox($parent, $x, $y, $w, $h) {
     return $list
 }
 
-function New-Toggle($parent, $text, $x, $y, [bool]$checked) {
+function New-Toggle($parent, $text, $x, $y, [bool]$checked, [scriptblock]$onChange) {
     $row = New-Object System.Windows.Forms.Panel
     $row.Location = New-Object System.Drawing.Point($x, $y)
     $row.Size = New-Object System.Drawing.Size(272, 26)
@@ -344,6 +344,7 @@ function New-Toggle($parent, $text, $x, $y, [bool]$checked) {
         param($sender, $e)
         $sender.Tag = -not [bool]$sender.Tag
         $sender.Invalidate()
+        if ($onChange) { & $onChange }
     })
 
     $parent.Controls.Add($row)
@@ -372,14 +373,14 @@ $state = Read-State
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'Prevent-peep — 大肥鱼安全助手'
-$form.ClientSize = New-Object System.Drawing.Size(920, 826)
+$form.ClientSize = New-Object System.Drawing.Size(920, 774)
 $form.StartPosition = 'CenterScreen'
 $form.BackColor = $C_BG
 $form.Font = New-Object System.Drawing.Font($fontName, 9)
 $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::None
 $form.MaximizeBox = $false
 $form.KeyPreview = $true
-$form.Region = New-Object System.Drawing.Region -ArgumentList (New-RoundedPath 920 826 18)
+$form.Region = New-Object System.Drawing.Region -ArgumentList (New-RoundedPath 920 774 18)
 $form.Add_Paint({
     param($sender, $e)
     $pen = New-Object System.Drawing.Pen ([System.Drawing.ColorTranslator]::FromHtml('#C9D8F2')), 1
@@ -491,27 +492,27 @@ $modeBox.Font = New-Object System.Drawing.Font($fontName, 9)
 $modeBox.SelectedIndex = if ($state.mode -eq 'deny') { 1 } else { 0 }
 $form.Controls.Add($modeBox)
 
-$scanBox = New-Toggle $form '扫描 pwsh 命令串（启发式）' 620 560 ([bool]$state.scanShell)
-$soundBox = New-Toggle $form '声音提醒' 620 586 ([bool]$state.alertSound)
-$toastBox = New-Toggle $form '弹窗提醒（托盘气泡）' 620 612 ([bool]$state.alertToast)
-$popupBox = New-Toggle $form '确认弹窗提醒' 620 638 ([bool]$state.alertPopup)
+$scanBox = New-Toggle $form '扫描 pwsh 命令串（启发式）' 620 560 ([bool]$state.scanShell) { Invoke-Save }
+$soundBox = New-Toggle $form '声音提醒' 620 586 ([bool]$state.alertSound) { Invoke-Save }
+$toastBox = New-Toggle $form '弹窗提醒（托盘气泡）' 620 612 ([bool]$state.alertToast) { Invoke-Save }
+$popupBox = New-Toggle $form '确认弹窗提醒' 620 638 ([bool]$state.alertPopup) { Invoke-Save }
 
-$null = New-Label $form '相对路径基准（可选）' 620 668 260 22 9 $C_MUTED $false
+$null = New-Label $form '相对路径基准（可选）' 620 664 260 20 9 $C_MUTED $false
 $baseBox = New-Object System.Windows.Forms.TextBox
-$baseBox.Location = New-Object System.Drawing.Point(620, 688)
-$baseBox.Size = New-Object System.Drawing.Size(256, 26)
+$baseBox.Location = New-Object System.Drawing.Point(620, 684)
+$baseBox.Size = New-Object System.Drawing.Size(256, 24)
 $baseBox.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
 $baseBox.Font = New-Object System.Drawing.Font($fontName, 9)
 $baseBox.Text = [string]$state.relativeBase
 $form.Controls.Add($baseBox)
 
-$openButton = New-Button $form '打开配置文件' 620 726 140 34 $false
+$openButton = New-Button $form '打开配置文件' 400 678 150 34 $false
 
 # ---------- 底部 ----------
-$hintLabel = New-Label $form '提示：黑名单优先于白名单；受管根之外的路径不受检查。' 26 800 470 20 8.5 $C_MUTED $false
-$statusLabel = New-Label $form '' 500 800 190 20 8.5 $C_ACCENT $false
-$saveButton = New-Button $form '保存' 700 790 90 34 $true
-$closeButton = New-Button $form '关闭' 800 790 90 34 $false
+$hintLabel = New-Label $form '提示：黑名单优先于白名单；受管根之外的路径不受检查。' 26 748 470 20 8.5 $C_MUTED $false
+$statusLabel = New-Label $form '' 500 748 190 20 8.5 $C_ACCENT $false
+$saveButton = New-Button $form '保存' 700 738 90 34 $true
+$closeButton = New-Button $form '关闭' 800 738 90 34 $false
 
 # ---------- 事件 ----------
 $allowAdd.Add_Click({ Add-Folder $allowList '选择要加入白名单的文件夹（永远允许）' })
@@ -529,7 +530,7 @@ $openButton.Add_Click({
     }
 })
 
-$saveButton.Add_Click({
+function Invoke-Save {
     $newState = [ordered]@{
         mode         = if ($modeBox.SelectedIndex -eq 1) { 'deny' } else { 'ask' }
         enforceRoots = @($enforceList.Items | ForEach-Object { [string]$_ })
@@ -547,7 +548,9 @@ $saveButton.Add_Click({
     } catch {
         [System.Windows.Forms.MessageBox]::Show("保存失败：`n$($_.Exception.Message)", 'Prevent-peep') | Out-Null
     }
-})
+}
+
+$saveButton.Add_Click({ Invoke-Save })
 
 $closeButton.Add_Click({ $form.Close() })
 $form.Add_KeyDown({ param($sender, $e) if ($e.KeyCode -eq 'Escape') { $form.Close() } })
