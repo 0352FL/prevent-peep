@@ -17,6 +17,8 @@ function Get-Defaults {
         allowRoots   = @('D:\TE_Code', 'D:\DSH')
         denyRoots    = @()
         scanShell    = $true
+        alertSound   = $true
+        alertToast   = $true
         relativeBase = ''
     }
 }
@@ -44,6 +46,8 @@ function Write-State($state) {
         allowRoots   = @($state.allowRoots | Where-Object { $_ })
         denyRoots    = @($state.denyRoots | Where-Object { $_ })
         scanShell    = [bool]$state.scanShell
+        alertSound   = [bool]$state.alertSound
+        alertToast   = [bool]$state.alertToast
     }
     if ($state.relativeBase) { $out.relativeBase = [string]$state.relativeBase }
     if (-not (Test-Path -LiteralPath $stateDir)) { New-Item -ItemType Directory -Path $stateDir -Force | Out-Null }
@@ -70,8 +74,8 @@ try { $null = New-Object System.Drawing.Font($fontName, 9) } catch { $fontName =
 # 卡片矩形（同时用于烘焙进背景与摆放控件）
 $cardA = New-Object System.Drawing.Rectangle(20, 164, 430, 300)
 $cardB = New-Object System.Drawing.Rectangle(470, 164, 430, 300)
-$cardC = New-Object System.Drawing.Rectangle(20, 480, 560, 250)
-$cardD = New-Object System.Drawing.Rectangle(600, 480, 300, 250)
+$cardC = New-Object System.Drawing.Rectangle(20, 480, 560, 302)
+$cardD = New-Object System.Drawing.Rectangle(600, 480, 300, 302)
 $cards = @($cardA, $cardB, $cardC, $cardD)
 
 # ---------- 拖动窗口（无边框） ----------
@@ -326,14 +330,14 @@ $state = Read-State
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'Prevent-peep — 大肥鱼安全助手'
-$form.ClientSize = New-Object System.Drawing.Size(920, 774)
+$form.ClientSize = New-Object System.Drawing.Size(920, 826)
 $form.StartPosition = 'CenterScreen'
 $form.BackColor = $C_BG
 $form.Font = New-Object System.Drawing.Font($fontName, 9)
 $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::None
 $form.MaximizeBox = $false
 $form.KeyPreview = $true
-$form.Region = New-Object System.Drawing.Region -ArgumentList (New-RoundedPath 920 774 18)
+$form.Region = New-Object System.Drawing.Region -ArgumentList (New-RoundedPath 920 826 18)
 $form.Add_Paint({
     param($sender, $e)
     $pen = New-Object System.Drawing.Pen ([System.Drawing.ColorTranslator]::FromHtml('#C9D8F2')), 1
@@ -455,22 +459,42 @@ $scanBox.BackColor = [System.Drawing.Color]::Transparent
 $scanBox.Checked = [bool]$state.scanShell
 $form.Controls.Add($scanBox)
 
-$null = New-Label $form '相对路径基准（可选）' 620 606 260 22 9 $C_MUTED $false
+$soundBox = New-Object System.Windows.Forms.CheckBox
+$soundBox.Text = '触发时播放提示音'
+$soundBox.Location = New-Object System.Drawing.Point(620, 594)
+$soundBox.Size = New-Object System.Drawing.Size(260, 24)
+$soundBox.ForeColor = $C_TEXT
+$soundBox.Font = New-Object System.Drawing.Font($fontName, 9)
+$soundBox.BackColor = [System.Drawing.Color]::Transparent
+$soundBox.Checked = [bool]$state.alertSound
+$form.Controls.Add($soundBox)
+
+$toastBox = New-Object System.Windows.Forms.CheckBox
+$toastBox.Text = '触发时弹出 Windows 托盘通知'
+$toastBox.Location = New-Object System.Drawing.Point(620, 618)
+$toastBox.Size = New-Object System.Drawing.Size(272, 24)
+$toastBox.ForeColor = $C_TEXT
+$toastBox.Font = New-Object System.Drawing.Font($fontName, 9)
+$toastBox.BackColor = [System.Drawing.Color]::Transparent
+$toastBox.Checked = [bool]$state.alertToast
+$form.Controls.Add($toastBox)
+
+$null = New-Label $form '相对路径基准（可选）' 620 650 260 22 9 $C_MUTED $false
 $baseBox = New-Object System.Windows.Forms.TextBox
-$baseBox.Location = New-Object System.Drawing.Point(620, 630)
+$baseBox.Location = New-Object System.Drawing.Point(620, 670)
 $baseBox.Size = New-Object System.Drawing.Size(256, 26)
 $baseBox.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
 $baseBox.Font = New-Object System.Drawing.Font($fontName, 9)
 $baseBox.Text = [string]$state.relativeBase
 $form.Controls.Add($baseBox)
 
-$openButton = New-Button $form '打开配置文件' 620 672 140 34 $false
+$openButton = New-Button $form '打开配置文件' 620 712 140 34 $false
 
 # ---------- 底部 ----------
-$hintLabel = New-Label $form '提示：黑名单优先于白名单；受管根之外的路径不受检查。' 26 748 470 20 8.5 $C_MUTED $false
-$statusLabel = New-Label $form '' 500 748 190 20 8.5 $C_ACCENT $false
-$saveButton = New-Button $form '保存' 700 738 90 34 $true
-$closeButton = New-Button $form '关闭' 800 738 90 34 $false
+$hintLabel = New-Label $form '提示：黑名单优先于白名单；受管根之外的路径不受检查。' 26 800 470 20 8.5 $C_MUTED $false
+$statusLabel = New-Label $form '' 500 800 190 20 8.5 $C_ACCENT $false
+$saveButton = New-Button $form '保存' 700 790 90 34 $true
+$closeButton = New-Button $form '关闭' 800 790 90 34 $false
 
 # ---------- 事件 ----------
 $allowAdd.Add_Click({ Add-Folder $allowList '选择要加入白名单的文件夹（永远允许）' })
@@ -495,6 +519,8 @@ $saveButton.Add_Click({
         allowRoots   = @($allowList.Items | ForEach-Object { [string]$_ })
         denyRoots    = @($denyList.Items | ForEach-Object { [string]$_ })
         scanShell    = [bool]$scanBox.Checked
+        alertSound   = [bool]$soundBox.Checked
+        alertToast   = [bool]$toastBox.Checked
         relativeBase = [string]$baseBox.Text
     }
     try {
