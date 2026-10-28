@@ -185,8 +185,9 @@ function Get-SoftBackdrop([string]$path, [int]$w, [int]$h) {
     $b1 = New-Object System.Drawing.Drawing2D.LinearGradientBrush($r1, [System.Drawing.Color]::FromArgb(255, $topColor.R, $topColor.G, $topColor.B), [System.Drawing.Color]::FromArgb(0, $topColor.R, $topColor.G, $topColor.B), 90)
     $g.FillRectangle($b1, $r1); $b1.Dispose()
 
-    $r2 = New-Object System.Drawing.Rectangle($dx, ($dy + $dh - $band), $dw, $band)
-    $b2 = New-Object System.Drawing.Drawing2D.LinearGradientBrush($r2, [System.Drawing.Color]::FromArgb(255, $botColor.R, $botColor.G, $botColor.B), [System.Drawing.Color]::FromArgb(0, $botColor.R, $botColor.G, $botColor.B), 270)
+    $bandBottom = [Math]::Min(110, [int]($dh / 2.6))
+    $r2 = New-Object System.Drawing.Rectangle($dx, ($dy + $dh - $bandBottom), $dw, $bandBottom)
+    $b2 = New-Object System.Drawing.Drawing2D.LinearGradientBrush($r2, [System.Drawing.Color]::FromArgb(225, $botColor.R, $botColor.G, $botColor.B), [System.Drawing.Color]::FromArgb(0, $botColor.R, $botColor.G, $botColor.B), 270)
     $g.FillRectangle($b2, $r2); $b2.Dispose()
 
     # 薄纱
