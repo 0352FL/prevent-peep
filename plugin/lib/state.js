@@ -39,6 +39,26 @@ export const DEFAULTS = Object.freeze({
   shellTools: ['pwsh', 'powershell', 'bash', 'sh', 'shell', 'cmd'],
   /** 会改变工作目录的工具，用来跟踪相对路径的基准 */
   cwdTools: ['working_directory'],
+  /** 写这些扩展名的文件时，也扫描写入内容里的路径（先写脚本再运行，是最常见的绕法） */
+  scriptExtensions: ['.py', '.ps1', '.psm1', '.bat', '.cmd', '.sh', '.bash', '.js', '.mjs', '.cjs', '.ts', '.vbs'],
+  /** 关掉后不扫脚本内容（开发本插件、改测试文件时会频繁提示，可以临时关） */
+  scanScripts: true,
+  /** 写入内容所在的参数名 */
+  contentKeys: ['content', 'contents', 'new_string', 'new_str', 'text', 'code'],
+  /** 完全不检查的参数（编辑前的旧内容，不构成新风险） */
+  ignoreKeys: ['old_string', 'old_str'],
+  /** 其余参数（不在上面任何名单里的）也兜底搜一遍绝对路径，防止别的插件 / MCP 工具换了参数名 */
+  scanAllArgs: true,
+  /** shell 里出现建链接、建盘符、编码命令、卸插件这类操作时要求确认 */
+  suspiciousCommands: true,
+  /** 只读工具：可以读受保护目录（插件配置、DSH 配置） */
+  readOnlyTools: ['read', 'glob', 'grep', 'read_image', 'present', 'working_directory', 'ls', 'list', 'view'],
+  /** 保护 $DSH_HOME（含本插件配置、DSH 设置）：非只读工具一律拒绝写入（不受 mode 影响） */
+  selfProtect: true,
+  /** 连插件自己的代码目录也保护起来。默认关：用 DSH 开发本插件时会被拦 */
+  protectPluginDir: false,
+  /** 额外的受保护目录 */
+  protectedRoots: [],
   /** 守卫自身出错时：false 放行（默认），true 拒绝 */
   failClosed: false,
   /** 两次提醒之间至少间隔多少毫秒，防止弹窗刷屏 */
@@ -76,6 +96,16 @@ export function mergeState(config, state) {
     scanKeys: strings(merged.scanKeys, DEFAULTS.scanKeys),
     shellTools: strings(merged.shellTools, DEFAULTS.shellTools),
     cwdTools: strings(merged.cwdTools, DEFAULTS.cwdTools),
+    scriptExtensions: strings(merged.scriptExtensions, DEFAULTS.scriptExtensions).map((x) => x.toLowerCase()),
+    scanScripts: merged.scanScripts !== false,
+    contentKeys: strings(merged.contentKeys, DEFAULTS.contentKeys),
+    ignoreKeys: strings(merged.ignoreKeys, DEFAULTS.ignoreKeys),
+    scanAllArgs: merged.scanAllArgs !== false,
+    suspiciousCommands: merged.suspiciousCommands !== false,
+    readOnlyTools: strings(merged.readOnlyTools, DEFAULTS.readOnlyTools),
+    selfProtect: merged.selfProtect !== false,
+    protectPluginDir: merged.protectPluginDir === true,
+    protectedRoots: roots(merged.protectedRoots),
     failClosed: merged.failClosed === true,
     alertCooldownMs: Number.isFinite(cooldown) && cooldown >= 0 ? cooldown : DEFAULTS.alertCooldownMs,
     alertSound: merged.alertSound !== false,

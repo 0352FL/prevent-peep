@@ -86,6 +86,12 @@ dsh plugin --profile desktop add "<路径>/prevent-peep/plugin"
 
 | 字段 | 默认 | 含义 |
 | --- | --- | --- |
+| `selfProtect` | `true` | 非只读工具写入 `$DSH_HOME`（本插件配置、DSH 设置）一律拒绝 |
+| `protectPluginDir` | `false` | 连插件代码目录也保护。**用 DSH 开发本插件时别开** |
+| `protectedRoots` | `[]` | 额外的受保护目录 |
+| `scanScripts` | `true` | 写 `.py` `.ps1` `.js` `.sh` 等脚本时扫描内容里的路径。**改本插件的测试文件时会频繁提示，可以临时关** |
+| `suspiciousCommands` | `true` | shell 里建链接、建盘符、编码命令、`dsh plugin` 等操作要求确认 |
+| `scanAllArgs` | `true` | 其余参数也兜底搜一遍绝对路径 |
 | `failClosed` | `false` | 守卫自己出错时：`false` 放行，`true` 拒绝 |
 | `alertCooldownMs` | `5000` | 两次提醒的最小间隔，防止智能体连环试探刷屏 |
 | `pathKeys` | `file_path`、`path`、`paths`、`workdir`、`cd` 等 | 整个当作路径判定的参数 |
@@ -99,7 +105,8 @@ dsh plugin --profile desktop add "<路径>/prevent-peep/plugin"
 
 ## 🧠 一点良心话
 
-- 🪄 shell 的检查是**启发式**：从命令里挑出像路径的片段来判。拼字符串、环境变量、先 `cd D:` 再在下一条命令里用相对路径，还是能绕
+- 🪄 shell 的检查是**启发式**：常见环境变量和 `cd` 目标会解析，但拼字符串（`"D:" + "\x"`）、套变量、`-EncodedCommand` 套娃、在上一条命令里 `cd` 下一条再用相对路径，还是能绕
+- 🔗 以前就存在的**硬链接**、指向本机目录的**普通共享名**，插件看不出真实位置
 - 📐 相对路径需要基准：`relativeBase`，或者守卫看到的最近一次 `working_directory`（所有会话共用）。两个都没有就判不了
 - 🎨 界面里的背景和头像是 AI 生成插画的裁切件，再分发请自行换图
 

@@ -98,6 +98,12 @@ Advanced keys (not in the window, but the window keeps them when you save):
 
 | Key | Default | Meaning |
 | --- | --- | --- |
+| `selfProtect` | `true` | non-read-only tools may never write inside `$DSH_HOME` (this plugin's settings, DSH's own settings) |
+| `protectPluginDir` | `false` | also protect the plugin's code folder. **Leave off while developing the plugin with DSH** |
+| `protectedRoots` | `[]` | extra protected folders |
+| `scanScripts` | `true` | when writing `.py` `.ps1` `.js` `.sh` …, scan the written content for paths. **Noisy when editing this plugin's own tests — turn off temporarily** |
+| `suspiciousCommands` | `true` | ask before links, new drives, encoded commands, `dsh plugin`, … in the shell |
+| `scanAllArgs` | `true` | search every other argument for absolute paths as a fallback |
 | `failClosed` | `false` | if the guard itself crashes: `false` lets the call through, `true` blocks it |
 | `alertCooldownMs` | `5000` | minimum gap between alerts, so a looping agent can't flood your screen |
 | `pathKeys` | `file_path`, `path`, `paths`, `workdir`, `cd`, … | arguments treated as a whole path |
@@ -115,9 +121,12 @@ never scanned.
 
 ## 🧠 Honest limits
 
-- 🪄 The shell scan is a **heuristic**: it pulls path-looking fragments out of the
-  command. String concatenation, environment variables, or `cd D:` followed by a
-  relative path in a later command still get past it
+- 🪄 The shell scan is a **heuristic**: common environment variables and `cd`
+  targets are resolved, but string concatenation (`"D:" + "\x"`), nested
+  variables, layered `-EncodedCommand`, or a `cd` in one command followed by a
+  relative path in the next still get past it
+- 🔗 Pre-existing **hard links** and plain **share names** that point back at this
+  machine can't be traced to their real location
 - 📐 Relative paths need a base: `relativeBase`, or the last `working_directory`
   the guard saw (shared across sessions). With neither, they can't be judged
 - 🎨 The window background and avatar are crops of an AI-generated illustration —

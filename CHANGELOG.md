@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.352.2
+
+- **自我保护**：非只读工具写入 `$DSH_HOME`（本插件配置、DSH 的 `settings.yaml` 等）一律拒绝，不受 `mode` 影响；shell 命令碰到这些目录时询问。可选 `protectPluginDir` 连插件代码目录一起保护。
+- **先写脚本再运行**：写入 `.py`、`.ps1`、`.js`、`.sh` 等脚本文件时，也扫描写入内容里的路径（`scanScripts`，可关）。
+- **shell**：展开 `~`、`$HOME`、`$env:X`、`${env:X}`、`%X%` 后再判定；检查 `cd` / `Set-Location` / `pushd` 的目标；识别 `/mnt/d/`、`/cygdrive/d/`、Git Bash 的 `/d/`。
+- **可疑命令**：`subst`、`New-PSDrive`、`mklink`、`New-Item -ItemType 链接`、`fsutil hardlink`、`-EncodedCommand`、`net use`、`dsh plugin` 要求确认（`suspiciousCommands`，可关）。
+- **路径写法**：任意主机的 `\\主机\D$`、`\\wsl$\…\mnt\d`、`file:///`、`\\.\` 与 `\\?\GLOBALROOT` 等设备路径（含卷影副本）；相对的 glob 模式（`..\..\秘密\*`）。
+- **兜底**：不在任何名单里的参数也搜一遍绝对路径，防止别的插件 / MCP 工具换参数名（`scanAllArgs`）。编辑前的旧内容（`old_string`）不检查。
+- **拒绝原因**：明确告诉模型"不要用脚本、其他命令、链接或改插件配置等方式绕过，需要时先问用户"。
+
 ## 1.352.1
 
 - **界面**：新增「声音提醒 / 自制弹窗提醒 / 系统弹窗提醒 / 确认弹窗提醒」四个独立开关，可任意组合；新增开关自动保存。

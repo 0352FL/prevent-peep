@@ -19,9 +19,21 @@
 import { spawn } from 'node:child_process'
 import { appendFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
+import { fileURLToPath } from 'node:url'
 import { loadState, STATE_FILE } from './state.js'
-import { PATH_LIKE, classify, toWindowsAbsolute } from './paths.js'
+import {
+  CD_COMMAND,
+  PATH_LIKE,
+  POSIX_DRIVE,
+  classify,
+  expandVars,
+  globPrefix,
+  isProtected,
+  normRoot,
+  posixToWindows,
+  toWindowsAbsolute,
+} from './paths.js'
 
 export const name = 'prevent-peep'
 export const inject = ['tools']
@@ -30,8 +42,33 @@ export const inject = ['tools']
 const BANNER_ZH = '大肥鱼安全助手提醒您：'
 const BANNER_EN = 'Big Fat Fish Security Assistant reminds you: '
 
+/** 写给模型看的说明：明确禁止换办法绕过（配合型模型看到这句一般就会停下来问用户）。 */
+const NO_WORKAROUND =
+  ' The user has deliberately restricted access to these paths. Do not try to reach them another way' +
+  ' (scripts, other shell commands, other tools, links, new drives, encoded commands, or editing this' +
+  ' plugin\'s settings). If you really need them, stop and ask the user.' +
+  ' 用户有意限制了对这些路径的访问，不要用脚本、其他命令、其他工具、链接、新盘符或修改本插件配置等方式绕过；确实需要时请停下来询问用户。'
+
+/** DSH 配置目录（默认受保护）和插件自己的目录（可选保护）。 */
+const PLUGIN_ROOT = fileURLToPath(new URL('..', import.meta.url))
+const DSH_HOME = process.env.DSH_HOME ?? join(homedir(), '.dsh')
+
+/** shell 里需要用户确认的操作。 */
+const SUSPICIOUS = [
+  [/(?:^|[\s;&|(])-(?:e|ec|en|enc|enco|encod|encode|encoded\w*)\s+[A-Za-z0-9+/=]{8,}/i, 'EncodedCommand'],
+  [/\bsubst\b/i, 'subst'],
+  [/\bnew-psdrive\b|\bndr\b/i, 'New-PSDrive'],
+  [/\bmklink\b/i, 'mklink'],
+  [/-itemtype\s+['"]?(?:symboliclink|junction|hardlink)\b/i, 'New-Item link'],
+  [/\bfsutil\s+hardlink\b/i, 'fsutil hardlink'],
+  [/\bnet\s+use\b/i, 'net use'],
+  [/\bdsh(?:\.exe|\.cmd)?\s+plugin\b/i, 'dsh plugin'],
+]
+
 /** 通过 working_directory 等工具跟踪到的当前工作目录（启发式，所有会话共用）。 */
 let trackedCwd
+/** 测试时可替换的环境变量来源。 */
+let envSource = process.env
 
 function currentBase(state) {
   return state.relativeBase ?? trackedCwd
@@ -49,34 +86,103 @@ function walk(value, key, depth, visit) {
   }
 }
 
-/**
- * 收集一次工具调用里所有越界的路径。
- * - pathKeys 里的参数：整体当作路径解析后判定
- * - scanKeys 里的参数：提取"像绝对路径"的片段逐个判定（glob 模式、shell 命令）
- */
-export function collect(exec, state, resolveReal) {
-  const args = exec.arguments
-  if (args === null || typeof args !== 'object') return []
-  const base = currentBase(state)
-  const isShell = state.shellTools.includes(exec.name)
-  const found = new Set()
+function extensionOf(p) {
+  const m = /\.[^.\\/]+$/.exec(String(p))
+  return m === null ? '' : m[0].toLowerCase()
+}
 
-  const check = (raw) => {
-    const abs = toWindowsAbsolute(raw, base)
-    if (abs === undefined) return
-    const bad = classify(abs, state, resolveReal)
-    if (bad !== undefined) found.add(bad)
+function protectedRootsOf(state) {
+  const roots = [...state.protectedRoots]
+  if (state.selfProtect) roots.push(normRoot(DSH_HOME))
+  if (state.protectPluginDir) roots.push(normRoot(PLUGIN_ROOT))
+  return [...new Set(roots.filter(Boolean))]
+}
+
+/**
+ * 检查一次工具调用。
+ * @returns found：越界的路径或可疑操作（按 mode 询问 / 拒绝）；blocked：写受保护目录（一律拒绝）
+ */
+export function inspect(exec, state, resolveReal) {
+  const result = { found: [], blocked: [] }
+  const args = exec.arguments
+  if (args === null || typeof args !== 'object') return result
+
+  const env = envSource
+  const isShell = state.shellTools.includes(exec.name)
+  const isReadOnly = state.readOnlyTools.includes(exec.name)
+  const protectedRoots = protectedRootsOf(state)
+  const found = new Set()
+  const blocked = new Set()
+
+  // 相对路径的基准：shell 的 workdir、glob/grep 的 path 优先，其次是配置或跟踪到的工作目录
+  const base0 = currentBase(state)
+  let base = base0
+  for (const key of ['workdir', 'cwd', 'path']) {
+    if (typeof args[key] === 'string') {
+      const abs = toWindowsAbsolute(args[key], base0, env)
+      if (abs !== undefined) { base = abs; break }
+    }
   }
 
+  const check = (raw, relativeTo = base0) => {
+    const abs = toWindowsAbsolute(raw, relativeTo, env)
+    if (abs === undefined) return
+    if (!isReadOnly && !isShell && isProtected(abs, protectedRoots, resolveReal)) blocked.add(abs)
+    const bad = classify(abs, state, resolveReal)
+    if (bad !== undefined) found.add(bad)
+    // shell 读写受保护目录也要问一下（无法区分读和写）
+    if (isShell && isProtected(abs, protectedRoots, resolveReal)) found.add(abs)
+  }
+
+  const scanText = (text, { posix = false, cd = false } = {}) => {
+    const expanded = expandVars(text, env)
+    for (const m of expanded.matchAll(PATH_LIKE)) check(m[0])
+    if (posix) {
+      for (const m of expanded.matchAll(POSIX_DRIVE)) {
+        const win = posixToWindows(m[0])
+        if (win !== undefined) check(win)
+      }
+    }
+    if (cd) for (const m of expanded.matchAll(CD_COMMAND)) check(m[1], base)
+  }
+
+  const isScriptWrite = Object.entries(args).some(
+    ([key, value]) => state.pathKeys.includes(key) && typeof value === 'string' && state.scriptExtensions.includes(extensionOf(value)),
+  )
+
   walk(args, undefined, 0, (key, value) => {
+    if (state.ignoreKeys.includes(key)) return
     if (state.pathKeys.includes(key)) {
       check(value)
-    } else if (state.scanKeys.includes(key) && (!isShell || state.scanShell)) {
-      for (const match of value.matchAll(PATH_LIKE)) check(match[0])
+    } else if (state.scanKeys.includes(key)) {
+      if (isShell && key === 'command') {
+        if (!state.scanShell) return
+        scanText(value, { posix: true, cd: true })
+        if (state.suspiciousCommands) {
+          for (const [re, label] of SUSPICIOUS) if (re.test(value)) found.add('可疑操作 ' + label)
+        }
+      } else {
+        scanText(value)
+        // 相对的 glob 模式：..\..\秘密\**\*  → 按基准解析通配符之前的部分
+        const prefix = globPrefix(value)
+        if (prefix.split(/[\\/]/).includes('..')) check(prefix, base)
+      }
+    } else if (state.contentKeys.includes(key)) {
+      if (isScriptWrite && state.scanScripts) scanText(value, { posix: true, cd: true })
+    } else if (state.scanAllArgs) {
+      scanText(value)
     }
   })
 
-  return [...found]
+  result.found = [...found]
+  result.blocked = [...blocked]
+  return result
+}
+
+/** 兼容旧接口：返回所有问题（越界 + 受保护）。 */
+export function collect(exec, state, resolveReal) {
+  const { found, blocked } = inspect(exec, state, resolveReal)
+  return [...new Set([...blocked, ...found])]
 }
 
 /** 放行（或交给用户审批）的切目录调用，更新相对路径基准。被拒绝的不更新。 */
@@ -86,7 +192,7 @@ function track(exec, state, decision) {
   const args = exec.arguments
   if (args === null || typeof args !== 'object') return
   for (const key of ['cd', 'path', 'workdir', 'directory']) {
-    const abs = toWindowsAbsolute(args[key], currentBase(state))
+    const abs = toWindowsAbsolute(args[key], currentBase(state), envSource)
     if (abs !== undefined) {
       trackedCwd = abs
       return
@@ -94,10 +200,11 @@ function track(exec, state, decision) {
   }
 }
 
-/** 测试用：重置跟踪到的工作目录和提醒节流。 */
-export function _resetForTest() {
+/** 测试用：重置跟踪到的工作目录、提醒节流，并可替换环境变量。 */
+export function _resetForTest(env) {
   trackedCwd = undefined
   lastAlertAt = 0
+  if (env !== undefined) envSource = env
 }
 
 let lastAlertAt = 0
@@ -240,11 +347,11 @@ function logAlert(line) {
 }
 export function apply(ctx, config) {
   ctx.on('tools/pre-execute', async (exec, next) => {
-    let found
+    let report
     let state
     try {
       state = loadState(config)
-      found = collect(exec, state)
+      report = inspect(exec, state)
     } catch (error) {
       logAlert('guard error: ' + String(error && error.message))
       if (state !== undefined && state.failClosed) {
@@ -253,6 +360,21 @@ export function apply(ctx, config) {
       // 守卫自身出错时默认不阻断正常调用
       return next()
     }
+
+    if (report.blocked.length > 0) {
+      const detail = report.blocked.join(', ')
+      raiseAlert(state, exec.name, detail)
+      return {
+        kind: 'deny',
+        reason: `prevent-peep: "${exec.name}" tried to modify protected settings (${detail}).` + NO_WORKAROUND,
+        displayReason: {
+          en: `${BANNER_EN}"${exec.name}" tried to modify the plugin's or DSH's own settings (${detail}). Blocked.`,
+          zh: `${BANNER_ZH}「${exec.name}」想修改插件或 DSH 自己的配置（${detail}），已拦截。`,
+        },
+      }
+    }
+
+    const found = report.found
     if (found.length === 0) {
       const decision = await next()
       track(exec, state, decision)
@@ -261,7 +383,7 @@ export function apply(ctx, config) {
 
     const detail = found.join(', ')
     raiseAlert(state, exec.name, detail)
-    const reason = `prevent-peep: "${exec.name}" targets ${detail}, outside the allowlist`
+    const reason = `prevent-peep: "${exec.name}" targets ${detail}, outside the allowlist.` + NO_WORKAROUND
 
     if (state.mode === 'deny') {
       return { kind: 'deny', reason }
