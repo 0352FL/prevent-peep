@@ -124,7 +124,7 @@ function Get-SoftBackdrop([string]$path, [int]$w, [int]$h) {
     }
     $srcRect = New-Object System.Drawing.Rectangle($sx, $sy, $sw, $sh)
 
-    $small = New-Object System.Drawing.Bitmap([Math]::Max(2, [int]($w / 12)), [Math]::Max(2, [int]($h / 12)))
+    $small = New-Object System.Drawing.Bitmap([Math]::Max(2, [int]($w / 6)), [Math]::Max(2, [int]($h / 6)))
     $g1 = [System.Drawing.Graphics]::FromImage($small)
     $g1.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
     $g1.DrawImage($src, (New-Object System.Drawing.Rectangle(0, 0, $small.Width, $small.Height)), $srcRect, [System.Drawing.GraphicsUnit]::Pixel)
