@@ -1,0 +1,18 @@
+﻿- insert:
+    - id: prevent-peep
+      name: prevent-peep-plugin
+      config:
+        # 首次运行时的默认值；用户用启动器保存过配置后，以
+        # $DSH_HOME/prevent-peep.json 为准（保存即生效，无需重启）。
+        mode: ask
+        enforceRoots:
+          - 'D:\'
+        allowRoots:
+          - 'D:\TE_Code'
+          - 'D:\DSH'
+        denyRoots: []
+        scanShell: true
+        alertSound: true
+        alertCustom: true
+        alertToast: false
+        alertPopup: true

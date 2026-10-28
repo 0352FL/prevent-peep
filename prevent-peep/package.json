@@ -1,0 +1,26 @@
+{
+  "name": "prevent-peep",
+  "version": "0.6.0",
+  "description": "一个防止小鲸鱼乱翻你的文件夹的插件。每次访问你不可见人的文件夹时会弹出警报。",
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json",
+    "./icon.svg": "./icon.svg"
+  },
+  "icon": "./icon.svg",
+  "files": [
+    "cordis.patch.yml",
+    "icon.svg",
+    "locale",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": ["dsh", "dsh-plugin", "deepseek-harness", "guard", "privacy"],
+  "engines": { "node": ">=22" },
+  "publishConfig": { "access": "public" },
+  "license": "MIT",
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" }
+  }
+}

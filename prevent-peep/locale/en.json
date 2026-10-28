@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Prevent-peep",
+    "description": "Stops the little whale from rummaging through your folders. Raises an alert every time a hidden folder is touched."
+  }
+}

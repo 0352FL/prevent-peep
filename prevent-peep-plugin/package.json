@@ -1,0 +1,24 @@
+{
+  "name": "prevent-peep-plugin",
+  "version": "0.6.0",
+  "description": "Path guard for DeepSeek Harness: ask or deny before file tools touch paths outside your allowlist.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "tools",
+    "assets",
+    "locale",
+    "icon.svg",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": ["dsh", "dsh-plugin", "deepseek-harness", "guard", "privacy"],
+  "engines": { "node": ">=22" },
+  "license": "MIT",
+  "scripts": { "test": "node test/guard.test.mjs" }
+}
