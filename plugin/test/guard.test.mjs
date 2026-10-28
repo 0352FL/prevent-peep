@@ -125,5 +125,16 @@ await expect('之后 ..\\..\\2学习\\a.txt 越界', read('..\\..\\2学习\\a.tx
 await expect('之后 src\\a.ts 在白名单内', read('src\\a.ts'), 'allow')
 await expect('之后 \\2学习\\a.txt（根相对）越界', read('\\2学习\\a.txt'), 'ask')
 
+console.log('— Windows 忽略尾随点/空格；卷 GUID 无法换算')
+writeFileSync(join(home, 'prevent-peep.json'), JSON.stringify({
+  mode: 'ask', enforceRoots: [], allowRoots: ['D:\\TE_Code'], denyRoots: ['D:\\2学习'], scanShell: false, ...QUIET,
+}))
+await new Promise((r) => setTimeout(r, 1100))
+_resetForTest()
+await expect('D:\\2学习.\\a.txt（尾随点）', read('D:\\2学习.\\a.txt'), 'ask')
+await expect('D:\\2学习 \\a.txt（尾随空格）', read('D:\\2学习 \\a.txt'), 'ask')
+await expect('D:\\2学习..\\a.txt（多个尾随点）', read('D:\\2学习..\\a.txt'), 'ask')
+await expect('卷 GUID 路径 -> 无法换算，拦截', read('\\\\?\\Volume{12345678-1234-1234-1234-123456789012}\\2学习\\a'), 'ask')
+await expect('白名单内正常路径仍放行', read('D:\\TE_Code\\a.txt'), 'allow')
 console.log(failed === 0 ? 'ALL PASS' : `${failed} FAILED`)
 process.exitCode = failed === 0 ? 0 : 1

@@ -27,6 +27,24 @@ function strip(raw) {
   return p
 }
 
+/** 卷 GUID 路径（\\?\Volume{...}）无法换算成盘符，单独识别。 */
+const VOLUME_PATH = /^\\\\\?\\volume\{/i
+
+/**
+ * Windows 会忽略每段路径末尾的点和空格：
+ * `D:\2学习.\a` 打开的就是 `D:\2学习\a`。逐段剥掉，但保留 `.` 与 `..`。
+ */
+function trimSegmentDots(p) {
+  return p
+    .split('\\')
+    .map((seg) => {
+      if (seg === '' || seg === '.' || seg === '..') return seg
+      const trimmed = seg.replace(/[. ]+$/, '')
+      return trimmed === '' ? seg : trimmed
+    })
+    .join('\\')
+}
+
 /**
  * 把工具参数里的路径解析成规范的 Windows 绝对路径。
  * - 绝对路径：解析 . 与 ..
@@ -39,12 +57,12 @@ export function toWindowsAbsolute(raw, base) {
   let p = strip(raw)
   if (p === '') return undefined
   if (/^[a-z]:(?!\\)/i.test(p)) p = p.slice(0, 2) + '\\' + p.slice(2)
-  if (/^[a-z]:\\/i.test(p) || p.startsWith('\\\\')) return win32.resolve(p)
+  if (/^[a-z]:\\/i.test(p) || p.startsWith('\\\\')) return win32.resolve(trimSegmentDots(p))
   if (base === undefined) return undefined
   const baseAbs = toWindowsAbsolute(base, undefined)
   if (baseAbs === undefined) return undefined
-  if (p.startsWith('\\')) return win32.resolve(win32.parse(baseAbs).root, p.slice(1))
-  return win32.resolve(baseAbs, p)
+  if (p.startsWith('\\')) return win32.resolve(win32.parse(baseAbs).root, trimSegmentDots(p).slice(1))
+  return win32.resolve(baseAbs, trimSegmentDots(p))
 }
 
 /** 比较用的键：小写、去掉末尾分隔符。 */
@@ -100,6 +118,8 @@ export function classify(absPath, state, resolveReal = realish) {
     if (state.denyRoots.some((root) => isUnder(key, root))) return candidate
     if (state.allowRoots.some((root) => isUnder(key, root))) continue
     if (state.enforceRoots.some((root) => isUnder(key, root))) return candidate
+    // 卷 GUID 路径换算不成盘符，无法与名单比较 —— 按越界处理（除非显式加入白名单）
+    if (VOLUME_PATH.test(key)) return candidate
   }
   return undefined
 }
