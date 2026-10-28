@@ -37,8 +37,8 @@ Requires DSH with a `desktop` (or `web`) profile.
 
 ```sh
 git clone <this repo> prevent-peep
-dsh plugin --profile desktop add "<path>/prevent-peep"
-dsh plugin --profile desktop add "<path>/prevent-peep-plugin"
+dsh plugin --profile desktop add "<path>/bundle"
+dsh plugin --profile desktop add "<path>/plugin"
 ```
 
 Both packages are needed: `prevent-peep` is the bundle (what the plugin manager shows),

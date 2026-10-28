@@ -33,8 +33,8 @@ DSH 的智能体能读到你 Windows 账户能读的一切。这个插件在这�
 
 ```sh
 git clone <本仓库> prevent-peep
-dsh plugin --profile desktop add "<路径>/prevent-peep"
-dsh plugin --profile desktop add "<路径>/prevent-peep-plugin"
+dsh plugin --profile desktop add "<路径>/bundle"
+dsh plugin --profile desktop add "<路径>/plugin"
 ```
 
 两个包都要装：`prevent-peep` 是组合包（插件管理页显示的就是它），
