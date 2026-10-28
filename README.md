@@ -1,63 +1,64 @@
-# Prevent-peep · 大肥鱼文件夹防窥眼罩
+# 🐟 Prevent-peep
 
 [English](README.md) | [简体中文](README.zh.md)
 
 [![DeepSeek Harness Plugin](https://deepseekharnessplugins.com/api/badge/0352FL/prevent-peep)](https://deepseekharnessplugins.com/plugins/0352FL/prevent-peep)
 
-A path guard for **DeepSeek Harness**. Before any file tool runs, it checks the target
-path against your allowlist — and pops an alert instead of silently reading your
-private folders.
+> 🐟 When the big fat fish goes wandering, don't let it see what it shouldn't —
+> and please don't let it upload any of it.
+> 😏 Bonus: stops Liang Sheng from roasting your XP choices.
 
-![UI](docs/ui.png)
+A pair of blinkers for **DeepSeek Harness**. Every time the agent wants to touch a
+file, it hits a gate first — and you decide whether it gets through.
 
-## Why
+## 🛡️ What it actually does
 
-DSH agents can read anything your Windows user can read. This plugin puts a gate in
-front of that: the tool is intercepted **before dispatch**, so a denied call never
-touches the disk.
+One window, three lists, four kinds of alert:
 
-## Features
+| List | Rule |
+| --- | --- |
+| ✅ Allow | always let through |
+| 🚫 Deny | always questioned (highest priority) |
+| 📁 Enforced roots | only paths under these are policed |
 
-- **Pre-dispatch interception** via the `tools/pre-execute` waterfall — not a prompt
-  instruction, the model cannot talk its way past it.
-- **Three lists**
-  - *Allow list* — always permitted
-  - *Deny list* — always checked (wins over the allow list)
-  - *Enforced roots* — only paths under these roots are policed
-- **Four independent alerts**, each with its own switch: system sound, self-drawn
-  silent notification window, Windows tray balloon (carries its own system sound),
-  and a modal confirmation dialog.
-- **Folder picker UI** with a native “select folder” dialog. Changes autosave and take
-  effect within a second — no restart.
-- **Global scope** — one config file for every workspace, session and subagent.
-- Covers `read`, `write`, `edit`, `glob`, `grep`, `read_image`, `present`,
-  `working_directory`, plus the `workdir` argument of `pwsh`.
+When something trips the gate, mix and match: **🔔 a ding**, **🪟 a silent
+corner notification we draw ourselves**, **💬 the native Windows balloon**, or
+**⚠️ a modal you have to click**.
 
-## Install
+Plus a native folder picker — no typing paths by hand. Changes save themselves and
+land within a second, no restart.
 
-Requires DSH with a `desktop` (or `web`) profile.
+## ⚠️ Read this: it's a soft lock, not a vault
+
+It stops fat fingers and idle curiosity — not someone who really wants in:
+
+- 🧱 It intercepts **DSH tool calls**, not the operating system
+- 🪄 A path assembled inside `pwsh` (`"D:" + "\secret"`) is invisible to it
+- 🚪 Reading the disk outside DSH, using another tool, or just clicking "allow"
+  will sail right past it
+
+If you need *nobody* to see it, use **ACLs / an encrypted container / a separate
+Windows account** — that's a real lock. This plugin just makes snooping slightly
+more expensive.
+
+## 📦 Install
+
+Requires DSH with a `desktop` or `web` profile. Both packages are needed: `bundle`
+is what the plugin manager shows, `plugin` is the implementation.
 
 ```sh
-git clone <this repo> prevent-peep
-dsh plugin --profile desktop add "<path>/bundle"
-dsh plugin --profile desktop add "<path>/plugin"
+git clone https://github.com/0352FL/prevent-peep
+dsh plugin --profile desktop add "<path>/prevent-peep/bundle"
+dsh plugin --profile desktop add "<path>/prevent-peep/plugin"
 ```
 
-Both packages are needed: `prevent-peep` is the bundle (what the plugin manager shows),
-`prevent-peep-plugin` is the implementation it mounts. Restart DSH once afterwards.
+Restart DSH once afterwards 🔄
 
-## Usage
+## 🎛️ Using it
 
-Double-click the launcher in `prevent-peep-plugin/`:
+Double-click `plugin/大肥鱼我真该控制你了！.cmd` and poke around.
 
-```
-大肥鱼我真该控制你了！.cmd
-```
-
-It opens a small window where you can add or remove folders, toggle the four alerts,
-and switch between `ask` (prompt) and `deny` (block silently).
-
-Settings land in `%USERPROFILE%\.dsh\prevent-peep.json`:
+Settings live in `%USERPROFILE%\.dsh\prevent-peep.json`:
 
 ```json
 {
@@ -77,37 +78,35 @@ Settings land in `%USERPROFILE%\.dsh\prevent-peep.json`:
 | --- | --- |
 | `mode` | `ask` pops the approval card, `deny` fails the call |
 | `allowRoots` | always allowed |
-| `denyRoots` | always checked (highest priority) |
+| `denyRoots` | always questioned (highest priority) |
 | `enforceRoots` | only paths here are policed |
 | `scanShell` | also scan `pwsh` command strings for enforced roots |
-| `alertSound` | play a single ding |
-| `alertCustom` | silent self-drawn notification window |
-| `alertToast` | native Windows tray balloon (has its own sound) |
-| `alertPopup` | modal confirmation dialog (silent) |
+| `alertSound` | 🔔 one short ding |
+| `alertCustom` | 🪟 silent self-drawn notification |
+| `alertToast` | 💬 native Windows balloon (brings its own sound) |
+| `alertPopup` | ⚠️ modal confirmation |
 
 Resolution order: **deny → allow → enforced root**.
 
-## Limitations
+## 👀 What it watches
 
-- The `pwsh` check is **heuristic**: it matches the enforced root as a literal in the
-  command string. Paths assembled at runtime (`"D:" + "\foo"`) get through.
-- Relative paths are only evaluated when they contain `..`; plain relative paths are
-  assumed to stay inside the workspace.
-- This is a guard rail, not a sandbox. For real confidentiality use ACLs, an encrypted
-  container, or a separate Windows account.
+`read`, `write`, `edit`, `glob`, `grep`, `read_image`, `present`,
+`working_directory`, plus the `workdir` argument of `pwsh`.
 
-## Assets
+## 🧠 Honest limits
 
-`prevent-peep-plugin/assets/` holds the runtime artwork: window background, avatar and
-the `.ico` used by the desktop shortcut. They are crops of an AI-generated illustration —
-replace them if you redistribute the plugin.
+- 🪄 The `pwsh` scan is a **heuristic**: literal match on enforced roots, easy to
+  dodge with string concatenation
+- 📐 Relative paths are only evaluated when they contain `..`
+- 🎨 The window background and avatar are crops of an AI-generated illustration —
+  swap them out if you redistribute this
 
-## Development
+## 🛠️ Development
 
 ```sh
-node prevent-peep-plugin/test/guard.test.mjs
+node plugin/test/guard.test.mjs
 ```
 
-## License
+## 📄 License
 
 MIT
