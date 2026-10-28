@@ -494,15 +494,15 @@ $modeBox.Font = New-Object System.Drawing.Font($fontName, 9)
 $modeBox.SelectedIndex = if ($state.mode -eq 'deny') { 1 } else { 0 }
 $form.Controls.Add($modeBox)
 
-$scanBox = New-Toggle $form '扫描push命令串（启发式）' 620 548 ([bool]$state.scanShell)
-$soundBox = New-Toggle $form '声音提醒' 620 569 ([bool]$state.alertSound)
-$customBox = New-Toggle $form '自制弹窗提醒' 620 590 ([bool]$state.alertCustom)
-$toastBox = New-Toggle $form '系统弹窗提醒' 620 611 ([bool]$state.alertToast)
-$popupBox = New-Toggle $form '确认弹窗提醒' 620 632 ([bool]$state.alertPopup)
+$scanBox = New-Toggle $form '扫描push命令串（启发式）' 620 566 ([bool]$state.scanShell)
+$soundBox = New-Toggle $form '声音提醒' 620 587 ([bool]$state.alertSound)
+$customBox = New-Toggle $form '自制弹窗提醒' 620 608 ([bool]$state.alertCustom)
+$toastBox = New-Toggle $form '系统弹窗提醒' 620 629 ([bool]$state.alertToast)
+$popupBox = New-Toggle $form '确认弹窗提醒' 620 650 ([bool]$state.alertPopup)
 
-$null = New-Label $form '相对路径基准（可选）' 620 656 260 18 8.5 $C_MUTED $false
+$null = New-Label $form '相对路径基准（可选）' 620 672 260 18 8.5 $C_MUTED $false
 $baseBox = New-Object System.Windows.Forms.TextBox
-$baseBox.Location = New-Object System.Drawing.Point(620, 674)
+$baseBox.Location = New-Object System.Drawing.Point(620, 690)
 $baseBox.Size = New-Object System.Drawing.Size(256, 22)
 $baseBox.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
 $baseBox.Font = New-Object System.Drawing.Font($fontName, 9)
