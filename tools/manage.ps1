@@ -314,28 +314,12 @@ function New-Toggle($parent, $text, $x, $y, [bool]$checked) {
     $row.BackColor = [System.Drawing.Color]::Transparent
     $row.Cursor = [System.Windows.Forms.Cursors]::Hand
     $row.Tag = $checked
+    $row.AccessibleName = $text
 
-    $label = New-Object System.Windows.Forms.Label
-    $label.Text = $text
-    $label.Location = New-Object System.Drawing.Point(50, 3)
-    $label.Size = New-Object System.Drawing.Size(218, 20)
-    $label.ForeColor = $C_TEXT
-    $label.Font = New-Object System.Drawing.Font($fontName, 9)
-    $label.BackColor = [System.Drawing.Color]::Transparent
-    $label.Cursor = [System.Windows.Forms.Cursors]::Hand
-    $row.Controls.Add($label)
-
-    $track = New-Object System.Windows.Forms.Panel
-    $track.Location = New-Object System.Drawing.Point(0, 2)
-    $track.Size = New-Object System.Drawing.Size(42, 22)
-    $track.BackColor = [System.Drawing.Color]::Transparent
-    $track.Cursor = [System.Windows.Forms.Cursors]::Hand
-    $row.Controls.Add($track)
-
-    $paint = {
-        param($sender)
-        $on = [bool]$row.Tag
-        $g = $sender.CreateGraphics()
+    $row.Add_Paint({
+        param($sender, $e)
+        $on = [bool]$sender.Tag
+        $g = $e.Graphics
         $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
         $trackColor = if ($on) { $C_ACCENT } else { [System.Drawing.ColorTranslator]::FromHtml('#CFD7E6') }
         $path = New-RoundedPath 41 21 10.5
@@ -347,15 +331,19 @@ function New-Toggle($parent, $text, $x, $y, [bool]$checked) {
         $knob = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::White)
         $g.FillEllipse($knob, $knobX, 2.5, 16, 16)
         $knob.Dispose()
-        $g.Dispose()
-    }
-    $track.Add_Paint($paint)
-    $track.Add_Click({ $row.Tag = -not [bool]$row.Tag; $track.Invalidate() })
-    $label.Add_Click({ $row.Tag = -not [bool]$row.Tag; $track.Invalidate() })
-    $row.Add_Click({ $row.Tag = -not [bool]$row.Tag; $track.Invalidate() })
+        $fontObj = New-Object System.Drawing.Font($fontName, 9)
+        $textBrush = New-Object System.Drawing.SolidBrush $C_TEXT
+        $g.DrawString([string]$sender.AccessibleName, $fontObj, $textBrush, 50, 3)
+        $textBrush.Dispose()
+        $fontObj.Dispose()
+    })
 
-    $row | Add-Member -NotePropertyName Track -NotePropertyValue $track -Force
-    $row | Add-Member -NotePropertyName Repaint -NotePropertyValue { $track.Invalidate() } -Force
+    $row.Add_Click({
+        param($sender, $e)
+        $sender.Tag = -not [bool]$sender.Tag
+        $sender.Invalidate()
+    })
+
     $parent.Controls.Add($row)
     return $row
 }
