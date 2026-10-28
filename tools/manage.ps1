@@ -136,41 +136,50 @@ function Get-SoftBackdrop([string]$path, [int]$w, [int]$h) {
     $ms = New-Object System.IO.MemoryStream(,$bytes)
     $src = [System.Drawing.Image]::FromStream($ms)
 
-    # 主体缩到 75% 居中；四周用「同一张图重度虚化铺满」代替扩图（避免镜像重复）
+    # 主体 75% 居中，保持原比例
     $fit = [Math]::Min($w / $src.Width, $h / $src.Height) * 0.75
     $dw = [Math]::Max(1, [int]($src.Width * $fit))
     $dh = [Math]::Max(1, [int]($src.Height * $fit))
     $dx = [int](($w - $dw) / 2)
     $dy = [int](($h - $dh) / 2)
 
-    $tiny = New-Object System.Drawing.Bitmap([Math]::Max(2, [int]($w / 22)), [Math]::Max(2, [int]($h / 22)))
-    $gt = [System.Drawing.Graphics]::FromImage($tiny)
-    $gt.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-    $gt.DrawImage($src, (New-Object System.Drawing.Rectangle(0, 0, $tiny.Width, $tiny.Height)), (New-Object System.Drawing.Rectangle(0, 0, $src.Width, $src.Height)), [System.Drawing.GraphicsUnit]::Pixel)
-    $gt.Dispose()
+    # 1) 同一张图的极柔化版：缩到 24px 宽，拉伸边缘时不会出现竖条纹
+    $blurW = 24
+    $blurH = [Math]::Max(2, [int]($blurW * $src.Height / $src.Width))
+    $blur = New-Object System.Drawing.Bitmap($blurW, $blurH)
+    $gb = [System.Drawing.Graphics]::FromImage($blur)
+    $gb.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+    $gb.DrawImage($src, 0, 0, $blur.Width, $blur.Height)
+    $gb.Dispose()
 
     $full = New-Object System.Drawing.Bitmap($w, $h)
-    $g2 = [System.Drawing.Graphics]::FromImage($full)
-    $g2.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-    $g2.DrawImage($tiny, 0, 0, $w, $h)
+    $g = [System.Drawing.Graphics]::FromImage($full)
+    $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+    $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
 
-    # 中心主体：轻微透明 + 宽羽化，避免出现生硬的矩形接缝
-    $ia = New-Object System.Drawing.Imaging.ImageAttributes
-    $cm = New-Object System.Drawing.Imaging.ColorMatrix
-    $cm.Matrix33 = 0.9
-    $ia.SetColorMatrix($cm)
-    $g2.DrawImage($src, (New-Object System.Drawing.Rectangle($dx, $dy, $dw, $dh)), 0, 0, $src.Width, $src.Height, [System.Drawing.GraphicsUnit]::Pixel, $ia)
-    $ia.Dispose()
-    Add-Feather $g2 $dx $dy $dw $dh 130
+    # 2) 底色取图边平均值，避免边缘露出空白
+    $g.Clear([System.Drawing.ColorTranslator]::FromHtml('#EDF1FB'))
 
-    # 薄纱
+    # 3) 虚化版放在主体位置，再把四边像素向外拉伸铺满
+    $g.DrawImage($blur, (New-Object System.Drawing.Rectangle($dx, $dy, $dw, $dh)))
+    $edge = 3
+    $g.DrawImage($blur, (New-Object System.Drawing.Rectangle(0, $dy, $dx, $dh)), (New-Object System.Drawing.Rectangle(0, 0, $edge, $blur.Height)), [System.Drawing.GraphicsUnit]::Pixel)
+    $g.DrawImage($blur, (New-Object System.Drawing.Rectangle(($dx + $dw), $dy, ($w - $dx - $dw), $dh)), (New-Object System.Drawing.Rectangle(($blur.Width - $edge), 0, $edge, $blur.Height)), [System.Drawing.GraphicsUnit]::Pixel)
+    $g.DrawImage($blur, (New-Object System.Drawing.Rectangle(0, 0, $w, $dy)), (New-Object System.Drawing.Rectangle(0, 0, $blur.Width, $edge)), [System.Drawing.GraphicsUnit]::Pixel)
+    $g.DrawImage($blur, (New-Object System.Drawing.Rectangle(0, ($dy + $dh), $w, ($h - $dy - $dh))), (New-Object System.Drawing.Rectangle(0, ($blur.Height - $edge), $blur.Width, $edge)), [System.Drawing.GraphicsUnit]::Pixel)
+
+    # 4) 同一位置叠清晰主体（内容与底层完全对齐，不会出现“两张图”）
+    $g.DrawImage($src, (New-Object System.Drawing.Rectangle($dx, $dy, $dw, $dh)))
+    Add-Feather $g $dx $dy $dw $dh 70
+
+    # 5) 薄纱
     $rect = New-Object System.Drawing.Rectangle(0, 0, $w, $h)
     $veil = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
         $rect,
         [System.Drawing.Color]::FromArgb(104, 255, 255, 255),
         [System.Drawing.Color]::FromArgb(84, 255, 255, 255),
         90)
-    $g2.FillRectangle($veil, $rect)
+    $g.FillRectangle($veil, $rect)
     $veil.Dispose()
 
     $topRect = New-Object System.Drawing.Rectangle(0, 0, $w, 150)
@@ -179,27 +188,27 @@ function Get-SoftBackdrop([string]$path, [int]$w, [int]$h) {
         [System.Drawing.Color]::FromArgb(198, 255, 255, 255),
         [System.Drawing.Color]::FromArgb(104, 255, 255, 255),
         90)
-    $g2.FillRectangle($topVeil, $topRect)
+    $g.FillRectangle($topVeil, $topRect)
     $topVeil.Dispose()
 
-    # 半透明卡片烘焙进背景（控件以透明背景叠在上面）
-    $g2.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    # 6) 半透明卡片烘焙进背景
+    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
     foreach ($card in $cards) {
         $cp = New-RoundedPath ($card.Width - 1) ($card.Height - 1) 14
-        $state = $g2.Save()
-        $g2.TranslateTransform($card.X, $card.Y)
+        $state = $g.Save()
+        $g.TranslateTransform($card.X, $card.Y)
         $fill = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(148, 255, 255, 255))
-        $g2.FillPath($fill, $cp)
+        $g.FillPath($fill, $cp)
         $fill.Dispose()
         $pen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(235, 220, 230, 248), 1)
-        $g2.DrawPath($pen, $cp)
+        $g.DrawPath($pen, $cp)
         $pen.Dispose()
-        $g2.Restore($state)
+        $g.Restore($state)
         $cp.Dispose()
     }
 
-    $g2.Dispose()
-    $tiny.Dispose()
+    $g.Dispose()
+    $blur.Dispose()
     $src.Dispose()
     $ms.Dispose()
     return $full
