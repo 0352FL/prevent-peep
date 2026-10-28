@@ -311,10 +311,10 @@ function New-ListBox($parent, $x, $y, $w, $h) {
     return $list
 }
 
-function New-Toggle($parent, $text, $x, $y, [bool]$checked, [scriptblock]$onChange) {
+function New-Toggle($parent, $text, $x, $y, [bool]$checked) {
     $row = New-Object System.Windows.Forms.Panel
     $row.Location = New-Object System.Drawing.Point($x, $y)
-    $row.Size = New-Object System.Drawing.Size(272, 26)
+    $row.Size = New-Object System.Drawing.Size(268, 22)
     $row.BackColor = [System.Drawing.Color]::Transparent
     $row.Cursor = [System.Windows.Forms.Cursors]::Hand
     $row.Tag = $checked
@@ -326,18 +326,18 @@ function New-Toggle($parent, $text, $x, $y, [bool]$checked, [scriptblock]$onChan
         $g = $e.Graphics
         $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
         $trackColor = if ($on) { $C_ACCENT } else { [System.Drawing.ColorTranslator]::FromHtml('#CFD7E6') }
-        $path = New-RoundedPath 41 21 10.5
+        $path = New-RoundedPath 33 17 8.5
         $brush = New-Object System.Drawing.SolidBrush $trackColor
         $g.FillPath($brush, $path)
         $brush.Dispose()
         $path.Dispose()
-        $knobX = if ($on) { 20 } else { 2 }
+        $knobX = if ($on) { 18 } else { 2 }
         $knob = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::White)
-        $g.FillEllipse($knob, $knobX, 2.5, 16, 16)
+        $g.FillEllipse($knob, $knobX, 2.2, 13, 13)
         $knob.Dispose()
-        $fontObj = New-Object System.Drawing.Font($fontName, 9)
+        $fontObj = New-Object System.Drawing.Font($fontName, 8.5)
         $textBrush = New-Object System.Drawing.SolidBrush $C_TEXT
-        $g.DrawString([string]$sender.AccessibleName, $fontObj, $textBrush, 50, 3)
+        $g.DrawString([string]$sender.AccessibleName, $fontObj, $textBrush, 41, 1)
         $textBrush.Dispose()
         $fontObj.Dispose()
     })
@@ -494,16 +494,16 @@ $modeBox.Font = New-Object System.Drawing.Font($fontName, 9)
 $modeBox.SelectedIndex = if ($state.mode -eq 'deny') { 1 } else { 0 }
 $form.Controls.Add($modeBox)
 
-$scanBox = New-Toggle $form '扫描push命令串（启发式）' 620 550 ([bool]$state.scanShell) { Invoke-Save }
-$soundBox = New-Toggle $form '声音提醒' 620 574 ([bool]$state.alertSound) { Invoke-Save }
-$customBox = New-Toggle $form '自制弹窗提醒' 620 598 ([bool]$state.alertCustom) { Invoke-Save }
-$toastBox = New-Toggle $form '系统弹窗提醒' 620 622 ([bool]$state.alertToast) { Invoke-Save }
-$popupBox = New-Toggle $form '确认弹窗提醒' 620 646 ([bool]$state.alertPopup) { Invoke-Save }
+$scanBox = New-Toggle $form '扫描push命令串（启发式）' 620 548 ([bool]$state.scanShell)
+$soundBox = New-Toggle $form '声音提醒' 620 569 ([bool]$state.alertSound)
+$customBox = New-Toggle $form '自制弹窗提醒' 620 590 ([bool]$state.alertCustom)
+$toastBox = New-Toggle $form '系统弹窗提醒' 620 611 ([bool]$state.alertToast)
+$popupBox = New-Toggle $form '确认弹窗提醒' 620 632 ([bool]$state.alertPopup)
 
-$null = New-Label $form '相对路径基准（可选）' 620 672 260 18 9 $C_MUTED $false
+$null = New-Label $form '相对路径基准（可选）' 620 656 260 18 8.5 $C_MUTED $false
 $baseBox = New-Object System.Windows.Forms.TextBox
-$baseBox.Location = New-Object System.Drawing.Point(620, 690)
-$baseBox.Size = New-Object System.Drawing.Size(256, 24)
+$baseBox.Location = New-Object System.Drawing.Point(620, 674)
+$baseBox.Size = New-Object System.Drawing.Size(256, 22)
 $baseBox.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
 $baseBox.Font = New-Object System.Drawing.Font($fontName, 9)
 $baseBox.Text = [string]$state.relativeBase
