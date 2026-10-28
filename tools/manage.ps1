@@ -115,7 +115,7 @@ function New-TopRoundedPath([int]$w, [int]$h, [int]$r) {
 }
 
 function Add-Feather($g, [int]$x, [int]$y, [int]$w, [int]$h, [int]$f) {
-    $c1 = [System.Drawing.Color]::FromArgb(110, 255, 255, 255)
+    $c1 = [System.Drawing.Color]::FromArgb(58, 255, 255, 255)
     $c2 = [System.Drawing.Color]::FromArgb(0, 255, 255, 255)
     $specs = @(
         @{ R = (New-Object System.Drawing.Rectangle -ArgumentList $x, $y, $f, $h); A = 0 },
@@ -137,7 +137,7 @@ function Get-SoftBackdrop([string]$path, [int]$w, [int]$h) {
     $src = [System.Drawing.Image]::FromStream($ms)
 
     # 主体缩到 75% 居中；四周用「同一张图重度虚化铺满」代替扩图（避免镜像重复）
-    $fit = [Math]::Min($w / $src.Width, $h / $src.Height) * 0.75
+    $fit = [Math]::Min($w / $src.Width, $h / $src.Height) * 0.50
     $dw = [Math]::Max(1, [int]($src.Width * $fit))
     $dh = [Math]::Max(1, [int]($src.Height * $fit))
     $dx = [int](($w - $dw) / 2)
@@ -157,18 +157,18 @@ function Get-SoftBackdrop([string]$path, [int]$w, [int]$h) {
     # 中心主体：轻微透明 + 宽羽化，避免出现生硬的矩形接缝
     $ia = New-Object System.Drawing.Imaging.ImageAttributes
     $cm = New-Object System.Drawing.Imaging.ColorMatrix
-    $cm.Matrix33 = 0.9
+    $cm.Matrix33 = 0.72
     $ia.SetColorMatrix($cm)
     $g2.DrawImage($src, (New-Object System.Drawing.Rectangle($dx, $dy, $dw, $dh)), 0, 0, $src.Width, $src.Height, [System.Drawing.GraphicsUnit]::Pixel, $ia)
     $ia.Dispose()
-    Add-Feather $g2 $dx $dy $dw $dh 130
+    Add-Feather $g2 $dx $dy $dw $dh 100
 
     # 薄纱
     $rect = New-Object System.Drawing.Rectangle(0, 0, $w, $h)
     $veil = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
         $rect,
-        [System.Drawing.Color]::FromArgb(132, 255, 255, 255),
-        [System.Drawing.Color]::FromArgb(108, 255, 255, 255),
+        [System.Drawing.Color]::FromArgb(104, 255, 255, 255),
+        [System.Drawing.Color]::FromArgb(84, 255, 255, 255),
         90)
     $g2.FillRectangle($veil, $rect)
     $veil.Dispose()
@@ -176,8 +176,8 @@ function Get-SoftBackdrop([string]$path, [int]$w, [int]$h) {
     $topRect = New-Object System.Drawing.Rectangle(0, 0, $w, 150)
     $topVeil = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
         $topRect,
-        [System.Drawing.Color]::FromArgb(228, 255, 255, 255),
-        [System.Drawing.Color]::FromArgb(132, 255, 255, 255),
+        [System.Drawing.Color]::FromArgb(198, 255, 255, 255),
+        [System.Drawing.Color]::FromArgb(104, 255, 255, 255),
         90)
     $g2.FillRectangle($topVeil, $topRect)
     $topVeil.Dispose()
@@ -188,7 +188,7 @@ function Get-SoftBackdrop([string]$path, [int]$w, [int]$h) {
         $cp = New-RoundedPath ($card.Width - 1) ($card.Height - 1) 14
         $state = $g2.Save()
         $g2.TranslateTransform($card.X, $card.Y)
-        $fill = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(178, 255, 255, 255))
+        $fill = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(148, 255, 255, 255))
         $g2.FillPath($fill, $cp)
         $fill.Dispose()
         $pen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(235, 220, 230, 248), 1)
