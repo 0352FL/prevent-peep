@@ -136,19 +136,58 @@ function Get-SoftBackdrop([string]$path, [int]$w, [int]$h) {
     $ms = New-Object System.IO.MemoryStream(,$bytes)
     $src = [System.Drawing.Image]::FromStream($ms)
 
-    # 整图按原比例铺满（cover 裁切，不拉伸变形）
-    $cover = [Math]::Max($w / $src.Width, $h / $src.Height)
-    $dw = [int]($src.Width * $cover)
-    $dh = [int]($src.Height * $cover)
-    $dx = [int](($w - $dw) / 2)
+    # 主体：宽度正好铺满，按原比例算高度，垂直居中
+    $dw = $w
+    $dh = [int]($w * $src.Height / $src.Width)
+    $dx = 0
     $dy = [int](($h - $dh) / 2)
+
+    # 上下补位：同一张图重度模糊铺满
+    $blurW = 24
+    $blurH = [Math]::Max(2, [int]($blurW * $src.Height / $src.Width))
+    $tiny = New-Object System.Drawing.Bitmap($blurW, $blurH)
+    $gt = [System.Drawing.Graphics]::FromImage($tiny)
+    $gt.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+    $gt.DrawImage($src, 0, 0, $blurW, $blurH)
+    $gt.Dispose()
+
+    $cover = [Math]::Max($w / $blurW, $h / $blurH)
+    $cw = [int]($blurW * $cover)
+    $ch = [int]($blurH * $cover)
+    $cx = [int](($w - $cw) / 2)
+    $cy = [int](($h - $ch) / 2)
 
     $full = New-Object System.Drawing.Bitmap($w, $h)
     $g = [System.Drawing.Graphics]::FromImage($full)
     $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
     $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
     $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    $g.Clear([System.Drawing.ColorTranslator]::FromHtml('#EDF1FB'))
+    $g.DrawImage($tiny, (New-Object System.Drawing.Rectangle($cx, $cy, $cw, $ch)))
+
+    # 清晰主体
     $g.DrawImage($src, (New-Object System.Drawing.Rectangle($dx, $dy, $dw, $dh)))
+
+    # 取主体上下边缘色，做同色溶解，消掉横向接缝
+    function Get-EdgeColor($bmp, [int]$py) {
+        $r = 0; $gg = 0; $b = 0; $n = 0
+        for ($x = 0; $x -lt $bmp.Width; $x += [Math]::Max(1, [int]($bmp.Width / 24))) {
+            $c = $bmp.GetPixel($x, ([Math]::Max(0, [Math]::Min($bmp.Height - 1, $py))))
+            $r += $c.R; $gg += $c.G; $b += $c.B; $n++
+        }
+        return [System.Drawing.Color]::FromArgb(255, [int]($r / $n), [int]($gg / $n), [int]($b / $n))
+    }
+    $topColor = Get-EdgeColor $src 1
+    $botColor = Get-EdgeColor $src ($src.Height - 2)
+
+    $band = [Math]::Min(46, [int]($dh / 6))
+    $r1 = New-Object System.Drawing.Rectangle($dx, $dy, $dw, $band)
+    $b1 = New-Object System.Drawing.Drawing2D.LinearGradientBrush($r1, [System.Drawing.Color]::FromArgb(255, $topColor.R, $topColor.G, $topColor.B), [System.Drawing.Color]::FromArgb(0, $topColor.R, $topColor.G, $topColor.B), 90)
+    $g.FillRectangle($b1, $r1); $b1.Dispose()
+
+    $r2 = New-Object System.Drawing.Rectangle($dx, ($dy + $dh - $band), $dw, $band)
+    $b2 = New-Object System.Drawing.Drawing2D.LinearGradientBrush($r2, [System.Drawing.Color]::FromArgb(255, $botColor.R, $botColor.G, $botColor.B), [System.Drawing.Color]::FromArgb(0, $botColor.R, $botColor.G, $botColor.B), 270)
+    $g.FillRectangle($b2, $r2); $b2.Dispose()
 
     # 薄纱
     $rect = New-Object System.Drawing.Rectangle(0, 0, $w, $h)
@@ -185,6 +224,7 @@ function Get-SoftBackdrop([string]$path, [int]$w, [int]$h) {
     }
 
     $g.Dispose()
+    $tiny.Dispose()
     $src.Dispose()
     $ms.Dispose()
     return $full
