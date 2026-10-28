@@ -2,6 +2,8 @@
 
 [English](README.md) | [简体中文](README.zh.md)
 
+[![DeepSeek Harness Plugin](https://deepseekharnessplugins.com/api/badge/0352FL/prevent-peep)](https://deepseekharnessplugins.com/plugins/0352FL/prevent-peep)
+
 A path guard for **DeepSeek Harness**. Before any file tool runs, it checks the target
 path against your allowlist — and pops an alert instead of silently reading your
 private folders.

@@ -2,6 +2,8 @@
 
 [English](README.md) | [简体中文](README.zh.md)
 
+[![DeepSeek Harness Plugin](https://deepseekharnessplugins.com/api/badge/0352FL/prevent-peep)](https://deepseekharnessplugins.com/plugins/0352FL/prevent-peep)
+
 给 **DeepSeek Harness** 用的路径守卫。任何文件类工具执行前，都会先拿目标路径
 去比对白名单——越界就弹警报，而不是悄悄翻你的私人文件夹。
 
