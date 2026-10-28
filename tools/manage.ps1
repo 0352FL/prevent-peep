@@ -344,7 +344,7 @@ function New-Toggle($parent, $text, $x, $y, [bool]$checked, [scriptblock]$onChan
         param($sender, $e)
         $sender.Tag = -not [bool]$sender.Tag
         $sender.Invalidate()
-        if ($onChange) { & $onChange }
+        try { Invoke-Save } catch { }
     })
 
     $parent.Controls.Add($row)
