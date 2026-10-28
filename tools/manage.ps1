@@ -143,37 +143,64 @@ function Get-SoftBackdrop([string]$path, [int]$w, [int]$h) {
     $dx = [int](($w - $dw) / 2)
     $dy = [int](($h - $dh) / 2)
 
-    # 1) 同一张图的极柔化版：缩到 24px 宽，拉伸边缘时不会出现竖条纹
-    $blurW = 24
-    $blurH = [Math]::Max(2, [int]($blurW * $src.Height / $src.Width))
-    $blur = New-Object System.Drawing.Bitmap($blurW, $blurH)
-    $gb = [System.Drawing.Graphics]::FromImage($blur)
-    $gb.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-    $gb.DrawImage($src, 0, 0, $blur.Width, $blur.Height)
-    $gb.Dispose()
+    # 采样四边平均色（8x8 缩略图）
+    $tiny = New-Object System.Drawing.Bitmap(8, 8)
+    $gt = [System.Drawing.Graphics]::FromImage($tiny)
+    $gt.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+    $gt.DrawImage($src, 0, 0, 8, 8)
+    $gt.Dispose()
+
+    $topR = 0; $topG = 0; $topB = 0
+    $botR = 0; $botG = 0; $botB = 0
+    for ($i = 0; $i -lt 8; $i++) {
+        $c1 = $tiny.GetPixel($i, 0); $topR += $c1.R; $topG += $c1.G; $topB += $c1.B
+        $c2 = $tiny.GetPixel($i, 7); $botR += $c2.R; $botG += $c2.G; $botB += $c2.B
+    }
+    $topColor = [System.Drawing.Color]::FromArgb(255, [int]($topR / 8), [int]($topG / 8), [int]($topB / 8))
+    $botColor = [System.Drawing.Color]::FromArgb(255, [int]($botR / 8), [int]($botG / 8), [int]($botB / 8))
+    $tiny.Dispose()
 
     $full = New-Object System.Drawing.Bitmap($w, $h)
     $g = [System.Drawing.Graphics]::FromImage($full)
     $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
     $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
 
-    # 2) 底色取图边平均值，避免边缘露出空白
-    $g.Clear([System.Drawing.ColorTranslator]::FromHtml('#EDF1FB'))
-
-    # 3) 虚化版放在主体位置，再把四边像素向外拉伸铺满
-    $g.DrawImage($blur, (New-Object System.Drawing.Rectangle($dx, $dy, $dw, $dh)))
-    $edge = 3
-    $g.DrawImage($blur, (New-Object System.Drawing.Rectangle(0, $dy, $dx, $dh)), (New-Object System.Drawing.Rectangle(0, 0, $edge, $blur.Height)), [System.Drawing.GraphicsUnit]::Pixel)
-    $g.DrawImage($blur, (New-Object System.Drawing.Rectangle(($dx + $dw), $dy, ($w - $dx - $dw), $dh)), (New-Object System.Drawing.Rectangle(($blur.Width - $edge), 0, $edge, $blur.Height)), [System.Drawing.GraphicsUnit]::Pixel)
-    $g.DrawImage($blur, (New-Object System.Drawing.Rectangle(0, 0, $w, $dy)), (New-Object System.Drawing.Rectangle(0, 0, $blur.Width, $edge)), [System.Drawing.GraphicsUnit]::Pixel)
-    $g.DrawImage($blur, (New-Object System.Drawing.Rectangle(0, ($dy + $dh), $w, ($h - $dy - $dh))), (New-Object System.Drawing.Rectangle(0, ($blur.Height - $edge), $blur.Width, $edge)), [System.Drawing.GraphicsUnit]::Pixel)
-
-    # 4) 同一位置叠清晰主体（内容与底层完全对齐，不会出现“两张图”）
-    $g.DrawImage($src, (New-Object System.Drawing.Rectangle($dx, $dy, $dw, $dh)))
-    Add-Feather $g $dx $dy $dw $dh 70
-
-    # 5) 薄纱
+    # 渐变底色铺满（颜色取自图像上下边）
     $rect = New-Object System.Drawing.Rectangle(0, 0, $w, $h)
+    $bgBrush = New-Object System.Drawing.Drawing2D.LinearGradientBrush($rect, $topColor, $botColor, 90)
+    $g.FillRectangle($bgBrush, $rect)
+    $bgBrush.Dispose()
+
+    # 清晰主体
+    $g.DrawImage($src, (New-Object System.Drawing.Rectangle($dx, $dy, $dw, $dh)))
+
+    # 用背景色反向羽化四周：图像逐渐溶进同色底，边界消失
+    $midColor = [System.Drawing.Color]::FromArgb(
+        255,
+        [int](($topColor.R + $botColor.R) / 2),
+        [int](($topColor.G + $botColor.G) / 2),
+        [int](($topColor.B + $botColor.B) / 2))
+    $band = [Math]::Min(150, [int]($dw / 3))
+    $bandV = [Math]::Min(150, [int]($dh / 3))
+
+    $topBandRect = New-Object System.Drawing.Rectangle($dx, $dy, $dw, $bandV)
+    $tb = New-Object System.Drawing.Drawing2D.LinearGradientBrush($topBandRect, [System.Drawing.Color]::FromArgb(255, $topColor.R, $topColor.G, $topColor.B), [System.Drawing.Color]::FromArgb(0, $topColor.R, $topColor.G, $topColor.B), 90)
+    $g.FillRectangle($tb, $topBandRect); $tb.Dispose()
+
+    $botBandRect = New-Object System.Drawing.Rectangle($dx, ($dy + $dh - $bandV), $dw, $bandV)
+    $bb = New-Object System.Drawing.Drawing2D.LinearGradientBrush($botBandRect, [System.Drawing.Color]::FromArgb(255, $botColor.R, $botColor.G, $botColor.B), [System.Drawing.Color]::FromArgb(0, $botColor.R, $botColor.G, $botColor.B), 270)
+    $g.FillRectangle($bb, $botBandRect); $bb.Dispose()
+
+    $leftRect = New-Object System.Drawing.Rectangle($dx, $dy, $band, $dh)
+    $lb = New-Object System.Drawing.Drawing2D.LinearGradientBrush($leftRect, [System.Drawing.Color]::FromArgb(255, $midColor.R, $midColor.G, $midColor.B), [System.Drawing.Color]::FromArgb(0, $midColor.R, $midColor.G, $midColor.B), 0)
+    $g.FillRectangle($lb, $leftRect); $lb.Dispose()
+
+    $rightRect = New-Object System.Drawing.Rectangle(($dx + $dw - $band), $dy, $band, $dh)
+    $rb = New-Object System.Drawing.Drawing2D.LinearGradientBrush($rightRect, [System.Drawing.Color]::FromArgb(255, $midColor.R, $midColor.G, $midColor.B), [System.Drawing.Color]::FromArgb(0, $midColor.R, $midColor.G, $midColor.B), 180)
+    $g.FillRectangle($rb, $rightRect); $rb.Dispose()
+
+    # 薄纱
     $veil = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
         $rect,
         [System.Drawing.Color]::FromArgb(104, 255, 255, 255),
@@ -191,8 +218,7 @@ function Get-SoftBackdrop([string]$path, [int]$w, [int]$h) {
     $g.FillRectangle($topVeil, $topRect)
     $topVeil.Dispose()
 
-    # 6) 半透明卡片烘焙进背景
-    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    # 半透明卡片
     foreach ($card in $cards) {
         $cp = New-RoundedPath ($card.Width - 1) ($card.Height - 1) 14
         $state = $g.Save()
@@ -208,7 +234,6 @@ function Get-SoftBackdrop([string]$path, [int]$w, [int]$h) {
     }
 
     $g.Dispose()
-    $blur.Dispose()
     $src.Dispose()
     $ms.Dispose()
     return $full
