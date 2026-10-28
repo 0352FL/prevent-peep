@@ -53,7 +53,6 @@ function Write-State($state) {
 
 # ---------- 配色 ----------
 $C_BG      = [System.Drawing.ColorTranslator]::FromHtml('#F5F7FF')
-$C_CARD    = [System.Drawing.Color]::White
 $C_BORDER  = [System.Drawing.ColorTranslator]::FromHtml('#DCE6F8')
 $C_TEXT    = [System.Drawing.ColorTranslator]::FromHtml('#1B2A4A')
 $C_MUTED   = [System.Drawing.ColorTranslator]::FromHtml('#5F7191')
@@ -63,10 +62,17 @@ $C_PINK    = [System.Drawing.ColorTranslator]::FromHtml('#F58BB0')
 $C_LINE    = [System.Drawing.ColorTranslator]::FromHtml('#D6DEF0')
 $C_HEADER  = [System.Drawing.ColorTranslator]::FromHtml('#DCE9FF')
 $C_HEADER2 = [System.Drawing.ColorTranslator]::FromHtml('#2C4470')
-$C_FIELD   = [System.Drawing.Color]::White
+$C_FIELD   = [System.Drawing.ColorTranslator]::FromHtml('#FBFCFE')
 
 $fontName = 'Microsoft YaHei UI'
 try { $null = New-Object System.Drawing.Font($fontName, 9) } catch { $fontName = 'Segoe UI' }
+
+# 卡片矩形（同时用于烘焙进背景与摆放控件）
+$cardA = New-Object System.Drawing.Rectangle(20, 164, 430, 300)
+$cardB = New-Object System.Drawing.Rectangle(470, 164, 430, 300)
+$cardC = New-Object System.Drawing.Rectangle(20, 480, 560, 250)
+$cardD = New-Object System.Drawing.Rectangle(600, 480, 300, 250)
+$cards = @($cardA, $cardB, $cardC, $cardD)
 
 # ---------- 拖动窗口（无边框） ----------
 $dragReady = $true
@@ -108,60 +114,96 @@ function New-TopRoundedPath([int]$w, [int]$h, [int]$r) {
     return $path
 }
 
+function Add-Feather($g, [int]$x, [int]$y, [int]$w, [int]$h, [int]$f) {
+    $c1 = [System.Drawing.Color]::FromArgb(110, 255, 255, 255)
+    $c2 = [System.Drawing.Color]::FromArgb(0, 255, 255, 255)
+    $specs = @(
+        @{ R = (New-Object System.Drawing.Rectangle -ArgumentList $x, $y, $f, $h); A = 0 },
+        @{ R = (New-Object System.Drawing.Rectangle -ArgumentList ($x + $w - $f), $y, $f, $h); A = 180 },
+        @{ R = (New-Object System.Drawing.Rectangle -ArgumentList $x, $y, $w, $f); A = 90 },
+        @{ R = (New-Object System.Drawing.Rectangle -ArgumentList $x, ($y + $h - $f), $w, $f); A = 270 }
+    )
+    foreach ($spec in $specs) {
+        $r = $spec.R
+        $b = New-Object System.Drawing.Drawing2D.LinearGradientBrush -ArgumentList $r, $c1, $c2, ([single]$spec.A)
+        $g.FillRectangle($b, $r)
+        $b.Dispose()
+    }
+}
+
 function Get-SoftBackdrop([string]$path, [int]$w, [int]$h) {
     $bytes = [System.IO.File]::ReadAllBytes($path)
     $ms = New-Object System.IO.MemoryStream(,$bytes)
     $src = [System.Drawing.Image]::FromStream($ms)
 
-    $srcRatio = $src.Width / $src.Height
-    $dstRatio = $w / $h
-    if ($srcRatio -gt $dstRatio) {
-        $sh = $src.Height; $sw = [int]($sh * $dstRatio)
-        $sx = [int](($src.Width - $sw) / 2); $sy = 0
-    } else {
-        $sw = $src.Width; $sh = [int]($sw / $dstRatio)
-        $sx = 0; $sy = [int](($src.Height - $sh) * 0.25)
-    }
-    $srcRect = New-Object System.Drawing.Rectangle($sx, $sy, $sw, $sh)
+    # 主体缩到 75% 居中；四周用「同一张图重度虚化铺满」代替扩图（避免镜像重复）
+    $fit = [Math]::Min($w / $src.Width, $h / $src.Height) * 0.75
+    $dw = [Math]::Max(1, [int]($src.Width * $fit))
+    $dh = [Math]::Max(1, [int]($src.Height * $fit))
+    $dx = [int](($w - $dw) / 2)
+    $dy = [int](($h - $dh) / 2)
 
-    $small = New-Object System.Drawing.Bitmap([Math]::Max(2, [int]($w / 6)), [Math]::Max(2, [int]($h / 6)))
-    $g1 = [System.Drawing.Graphics]::FromImage($small)
-    $g1.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-    $g1.DrawImage($src, (New-Object System.Drawing.Rectangle(0, 0, $small.Width, $small.Height)), $srcRect, [System.Drawing.GraphicsUnit]::Pixel)
-    $g1.Dispose()
+    $tiny = New-Object System.Drawing.Bitmap([Math]::Max(2, [int]($w / 22)), [Math]::Max(2, [int]($h / 22)))
+    $gt = [System.Drawing.Graphics]::FromImage($tiny)
+    $gt.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+    $gt.DrawImage($src, (New-Object System.Drawing.Rectangle(0, 0, $tiny.Width, $tiny.Height)), (New-Object System.Drawing.Rectangle(0, 0, $src.Width, $src.Height)), [System.Drawing.GraphicsUnit]::Pixel)
+    $gt.Dispose()
 
     $full = New-Object System.Drawing.Bitmap($w, $h)
     $g2 = [System.Drawing.Graphics]::FromImage($full)
     $g2.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-    $g2.DrawImage($small, 0, 0, $w, $h)
+    $g2.DrawImage($tiny, 0, 0, $w, $h)
 
-    # 整体薄纱：够透能看清图，又压住杂色
+    # 中心主体：轻微透明 + 宽羽化，避免出现生硬的矩形接缝
+    $ia = New-Object System.Drawing.Imaging.ImageAttributes
+    $cm = New-Object System.Drawing.Imaging.ColorMatrix
+    $cm.Matrix33 = 0.9
+    $ia.SetColorMatrix($cm)
+    $g2.DrawImage($src, (New-Object System.Drawing.Rectangle($dx, $dy, $dw, $dh)), 0, 0, $src.Width, $src.Height, [System.Drawing.GraphicsUnit]::Pixel, $ia)
+    $ia.Dispose()
+    Add-Feather $g2 $dx $dy $dw $dh 130
+
+    # 薄纱
     $rect = New-Object System.Drawing.Rectangle(0, 0, $w, $h)
     $veil = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
         $rect,
-        [System.Drawing.Color]::FromArgb(150, 255, 255, 255),
-        [System.Drawing.Color]::FromArgb(120, 255, 255, 255),
+        [System.Drawing.Color]::FromArgb(132, 255, 255, 255),
+        [System.Drawing.Color]::FromArgb(108, 255, 255, 255),
         90)
     $g2.FillRectangle($veil, $rect)
     $veil.Dispose()
 
-    # 顶部标题区再压一层，保证字清楚
     $topRect = New-Object System.Drawing.Rectangle(0, 0, $w, 150)
     $topVeil = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
         $topRect,
-        [System.Drawing.Color]::FromArgb(235, 255, 255, 255),
-        [System.Drawing.Color]::FromArgb(150, 255, 255, 255),
+        [System.Drawing.Color]::FromArgb(228, 255, 255, 255),
+        [System.Drawing.Color]::FromArgb(132, 255, 255, 255),
         90)
     $g2.FillRectangle($topVeil, $topRect)
     $topVeil.Dispose()
 
+    # 半透明卡片烘焙进背景（控件以透明背景叠在上面）
+    $g2.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    foreach ($card in $cards) {
+        $cp = New-RoundedPath ($card.Width - 1) ($card.Height - 1) 14
+        $state = $g2.Save()
+        $g2.TranslateTransform($card.X, $card.Y)
+        $fill = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(178, 255, 255, 255))
+        $g2.FillPath($fill, $cp)
+        $fill.Dispose()
+        $pen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(235, 220, 230, 248), 1)
+        $g2.DrawPath($pen, $cp)
+        $pen.Dispose()
+        $g2.Restore($state)
+        $cp.Dispose()
+    }
+
     $g2.Dispose()
-    $small.Dispose()
+    $tiny.Dispose()
     $src.Dispose()
     $ms.Dispose()
     return $full
 }
-
 function Get-Avatar([string]$path, [int]$size) {
     $bytes = [System.IO.File]::ReadAllBytes($path)
     $ms = New-Object System.IO.MemoryStream(,$bytes)
@@ -179,24 +221,6 @@ function Get-Avatar([string]$path, [int]$size) {
     $g.DrawEllipse($ring, 2, 2, $size - 5, $size - 5)
     $ring.Dispose(); $g.Dispose(); $src.Dispose(); $ms.Dispose()
     return $bmp
-}
-
-function Add-RoundedCard($parent, $x, $y, $w, $h) {
-    $panel = New-Object System.Windows.Forms.Panel
-    $panel.Location = New-Object System.Drawing.Point($x, $y)
-    $panel.Size = New-Object System.Drawing.Size($w, $h)
-    $panel.BackColor = $C_CARD
-    $panel.Region = New-Object System.Drawing.Region -ArgumentList (New-RoundedPath ($w - 1) ($h - 1) 14)
-    $panel.Add_Paint({
-        param($sender, $e)
-        $pen = New-Object System.Drawing.Pen $C_BORDER, 1
-        $g = New-RoundedPath ($sender.Width - 1) ($sender.Height - 1) 14
-        $e.Graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
-        $e.Graphics.DrawPath($pen, $g)
-        $pen.Dispose(); $g.Dispose()
-    })
-    $parent.Controls.Add($panel)
-    return $panel
 }
 
 function New-Label($parent, $text, $x, $y, $w, $h, $size, $color, $bold) {
@@ -362,62 +386,59 @@ if (Test-Path -LiteralPath $avatarPath) {
     } catch { }
 }
 
-# ---------- 卡片 ----------
-$allowCard = Add-RoundedCard $form 20 164 430 300
-$null = New-Label $allowCard '白名单 · 永远允许' 20 16 380 24 11 $C_TEXT $true
-$null = New-Label $allowCard '这些目录及其子目录不会被拦截' 20 42 380 20 8.5 $C_MUTED $false
-$allowList = New-ListBox $allowCard 20 68 390 172
-$allowAdd = New-Button $allowCard '＋ 添加文件夹' 20 250 150 34 $true
-$allowRemove = New-Button $allowCard '移除所选' 182 250 110 34 $false
+# ---------- 卡片内容（卡片底已烘焙进背景） ----------
+$null = New-Label $form '白名单 · 永远允许' 40 180 380 24 11 $C_TEXT $true
+$null = New-Label $form '这些目录及其子目录不会被拦截' 40 206 380 20 8.5 $C_MUTED $false
+$allowList = New-ListBox $form 40 232 390 172
+$allowAdd = New-Button $form '＋ 添加文件夹' 40 414 150 34 $true
+$allowRemove = New-Button $form '移除所选' 202 414 110 34 $false
 
-$denyCard = Add-RoundedCard $form 470 164 430 300
-$null = New-Label $denyCard '黑名单 · 永远检查' 20 16 380 24 11 $C_TEXT $true
-$null = New-Label $denyCard '优先级最高，覆盖白名单与受管根' 20 42 380 20 8.5 $C_MUTED $false
-$denyList = New-ListBox $denyCard 20 68 390 172
-$denyAdd = New-Button $denyCard '＋ 添加文件夹' 20 250 150 34 $true
-$denyRemove = New-Button $denyCard '移除所选' 182 250 110 34 $false
+$null = New-Label $form '黑名单 · 永远检查' 490 180 380 24 11 $C_TEXT $true
+$null = New-Label $form '优先级最高，覆盖白名单与受管根' 490 206 380 20 8.5 $C_MUTED $false
+$denyList = New-ListBox $form 490 232 390 172
+$denyAdd = New-Button $form '＋ 添加文件夹' 490 414 150 34 $true
+$denyRemove = New-Button $form '移除所选' 652 414 110 34 $false
 
-$enforceCard = Add-RoundedCard $form 20 480 560 250
-$null = New-Label $enforceCard '受管根 · 检查范围' 20 16 480 24 11 $C_TEXT $true
-$null = New-Label $enforceCard '只有落在这些目录下的路径才会被检查' 20 42 480 20 8.5 $C_MUTED $false
-$enforceList = New-ListBox $enforceCard 20 68 520 120
-$enforceAdd = New-Button $enforceCard '＋ 添加文件夹' 20 198 150 34 $false
-$enforceRemove = New-Button $enforceCard '移除所选' 182 198 110 34 $false
+$null = New-Label $form '受管根 · 检查范围' 40 496 480 24 11 $C_TEXT $true
+$null = New-Label $form '只有落在这些目录下的路径才会被检查' 40 522 480 20 8.5 $C_MUTED $false
+$enforceList = New-ListBox $form 40 548 520 120
+$enforceAdd = New-Button $form '＋ 添加文件夹' 40 678 150 34 $false
+$enforceRemove = New-Button $form '移除所选' 202 678 110 34 $false
 
-$optionCard = Add-RoundedCard $form 600 480 300 250
-$null = New-Label $optionCard '行为' 20 16 260 24 11 $C_TEXT $true
-$null = New-Label $optionCard '命中时' 20 52 70 24 9 $C_MUTED $false
+$null = New-Label $form '行为' 620 496 260 24 11 $C_TEXT $true
+$null = New-Label $form '命中时' 620 532 70 24 9 $C_MUTED $false
 
 $modeBox = New-Object System.Windows.Forms.ComboBox
 $modeBox.DropDownStyle = 'DropDownList'
-$modeBox.Location = New-Object System.Drawing.Point(96, 49)
+$modeBox.Location = New-Object System.Drawing.Point(696, 529)
 $modeBox.Size = New-Object System.Drawing.Size(184, 28)
 $modeBox.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
 $modeBox.Font = New-Object System.Drawing.Font($fontName, 9)
 [void]$modeBox.Items.Add('ask · 弹窗询问')
 [void]$modeBox.Items.Add('deny · 直接拒绝')
 $modeBox.SelectedIndex = if ($state.mode -eq 'deny') { 1 } else { 0 }
-$optionCard.Controls.Add($modeBox)
+$form.Controls.Add($modeBox)
 
 $scanBox = New-Object System.Windows.Forms.CheckBox
 $scanBox.Text = '扫描 pwsh 命令串（启发式）'
-$scanBox.Location = New-Object System.Drawing.Point(20, 90)
+$scanBox.Location = New-Object System.Drawing.Point(620, 570)
 $scanBox.Size = New-Object System.Drawing.Size(260, 26)
 $scanBox.ForeColor = $C_TEXT
 $scanBox.Font = New-Object System.Drawing.Font($fontName, 9)
+$scanBox.BackColor = [System.Drawing.Color]::Transparent
 $scanBox.Checked = [bool]$state.scanShell
-$optionCard.Controls.Add($scanBox)
+$form.Controls.Add($scanBox)
 
-$null = New-Label $optionCard '相对路径基准（可选）' 20 126 260 22 9 $C_MUTED $false
+$null = New-Label $form '相对路径基准（可选）' 620 606 260 22 9 $C_MUTED $false
 $baseBox = New-Object System.Windows.Forms.TextBox
-$baseBox.Location = New-Object System.Drawing.Point(20, 150)
+$baseBox.Location = New-Object System.Drawing.Point(620, 630)
 $baseBox.Size = New-Object System.Drawing.Size(256, 26)
 $baseBox.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
 $baseBox.Font = New-Object System.Drawing.Font($fontName, 9)
 $baseBox.Text = [string]$state.relativeBase
-$optionCard.Controls.Add($baseBox)
+$form.Controls.Add($baseBox)
 
-$openButton = New-Button $optionCard '打开配置文件' 20 192 140 34 $false
+$openButton = New-Button $form '打开配置文件' 620 672 140 34 $false
 
 # ---------- 底部 ----------
 $hintLabel = New-Label $form '提示：黑名单优先于白名单；受管根之外的路径不受检查。' 26 748 470 20 8.5 $C_MUTED $false
