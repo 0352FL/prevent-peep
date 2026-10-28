@@ -10,6 +10,7 @@
   },
   "icon": "./icon.svg",
   "files": [
+    "assets",
     "lib",
     "locale",
     "tools",
