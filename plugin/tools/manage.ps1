@@ -13,13 +13,13 @@ $avatarPath = Join-Path $assetsDir 'avatar.png'
 function Get-Defaults {
     return [ordered]@{
         mode         = 'ask'
-        enforceRoots = @('D:\')
-        allowRoots   = @('D:\TE_Code', 'D:\DSH')
+        enforceRoots = @()
+        allowRoots   = @()
         denyRoots    = @()
         scanShell    = $true
         alertSound   = $true
         alertCustom  = $true
-        alertToast   = $true
+        alertToast   = $false
         alertPopup   = $true
         relativeBase = ''
     }
@@ -42,18 +42,30 @@ function Read-State {
 }
 
 function Write-State($state) {
-    $out = [ordered]@{
-        mode         = [string]$state.mode
-        enforceRoots = @($state.enforceRoots | Where-Object { $_ })
-        allowRoots   = @($state.allowRoots | Where-Object { $_ })
-        denyRoots    = @($state.denyRoots | Where-Object { $_ })
-        scanShell    = [bool]$state.scanShell
-        alertSound   = [bool]$state.alertSound
-        alertCustom  = [bool]$state.alertCustom
-        alertToast   = [bool]$state.alertToast
-        alertPopup   = [bool]$state.alertPopup
+    # 先读出现有文件，保留窗口里没有的高级选项（failClosed、alertCooldownMs、pathKeys 等），
+    # 否则一点「保存」就会把手动加的配置抹掉
+    $out = [ordered]@{}
+    if (Test-Path -LiteralPath $statePath) {
+        try {
+            $oldRaw = [System.IO.File]::ReadAllText($statePath, [System.Text.Encoding]::UTF8)
+            $old = $oldRaw | ConvertFrom-Json
+            foreach ($prop in $old.PSObject.Properties) { $out[$prop.Name] = $prop.Value }
+        } catch { }
     }
-    if ($state.relativeBase) { $out.relativeBase = [string]$state.relativeBase }
+    $out['mode']         = [string]$state.mode
+    $out['enforceRoots'] = @($state.enforceRoots | Where-Object { $_ })
+    $out['allowRoots']   = @($state.allowRoots | Where-Object { $_ })
+    $out['denyRoots']    = @($state.denyRoots | Where-Object { $_ })
+    $out['scanShell']    = [bool]$state.scanShell
+    $out['alertSound']   = [bool]$state.alertSound
+    $out['alertCustom']  = [bool]$state.alertCustom
+    $out['alertToast']   = [bool]$state.alertToast
+    $out['alertPopup']   = [bool]$state.alertPopup
+    if ($state.relativeBase) {
+        $out['relativeBase'] = [string]$state.relativeBase
+    } elseif ($out.Contains('relativeBase')) {
+        $out.Remove('relativeBase')
+    }
     if (-not (Test-Path -LiteralPath $stateDir)) { New-Item -ItemType Directory -Path $stateDir -Force | Out-Null }
     $text = ($out | ConvertTo-Json -Depth 5) + "`n"
     [System.IO.File]::WriteAllText($statePath, $text, (New-Object System.Text.UTF8Encoding($false)))
@@ -494,7 +506,7 @@ $modeBox.Font = New-Object System.Drawing.Font($fontName, 9)
 $modeBox.SelectedIndex = if ($state.mode -eq 'deny') { 1 } else { 0 }
 $form.Controls.Add($modeBox)
 
-$scanBox = New-Toggle $form '扫描push命令串（启发式）' 620 566 ([bool]$state.scanShell)
+$scanBox = New-Toggle $form '扫描 shell 命令串（启发式）' 620 566 ([bool]$state.scanShell)
 $soundBox = New-Toggle $form '声音提醒' 620 587 ([bool]$state.alertSound)
 $customBox = New-Toggle $form '自制弹窗提醒' 620 608 ([bool]$state.alertCustom)
 $toastBox = New-Toggle $form '系统弹窗提醒' 620 629 ([bool]$state.alertToast)
@@ -512,7 +524,7 @@ $form.Controls.Add($baseBox)
 $openButton = New-Button $form '打开配置文件' 400 678 150 34 $false
 
 # ---------- 底部 ----------
-$hintLabel = New-Label $form '提示：黑名单优先于白名单；受管根之外的路径不受检查。' 26 748 470 20 8.5 $C_MUTED $false
+$hintLabel = New-Label $form '提示：黑名单优先于白名单；受管根之外的路径不受检查（黑名单除外）。' 26 748 470 20 8.5 $C_MUTED $false
 $statusLabel = New-Label $form '' 500 748 190 20 8.5 $C_ACCENT $false
 $saveButton = New-Button $form '保存' 700 738 90 34 $true
 $closeButton = New-Button $form '关闭' 800 738 90 34 $false

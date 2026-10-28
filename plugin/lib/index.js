@@ -9,9 +9,9 @@
  * 缺省值由 profile 的 cordis.patch.yml 提供。改完保存即生效，无需重启。
  *
  * 局限（务必知情）：
- * - 只检查工具参数里的路径字符串；`pwsh` 里运行时拼接的路径无法可靠识别，
- *   因此对 shell 仅做"命令串包含受管根字样"的启发式检查（可能误报）。
- * - 相对路径只在其包含 `..` 时按 relativeBase 解析；普通相对路径视为在工作区内。
+ * - 只检查工具参数里的路径字符串；shell 里运行时拼接的路径（`"D:" + "\x"`、
+ *   环境变量、先 cd 再用相对路径）无法可靠识别，命令串只做"提取像路径的片段"的启发式检查。
+ * - 相对路径按 relativeBase（或跟踪到的 working_directory）解析；两者都没有时无法判定。
  *
  * @module prevent-peep
  */
@@ -20,8 +20,8 @@ import { spawn } from 'node:child_process'
 import { appendFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { resolve } from 'node:path'
 import { loadState, STATE_FILE } from './state.js'
+import { PATH_LIKE, classify, toWindowsAbsolute } from './paths.js'
 
 export const name = 'prevent-peep'
 export const inject = ['tools']
@@ -30,90 +30,77 @@ export const inject = ['tools']
 const BANNER_ZH = '大肥鱼安全助手提醒您：'
 const BANNER_EN = 'Big Fat Fish Security Assistant reminds you: '
 
-function isAbsolutePath(p) {
-  return /^[a-zA-Z]:[\\/]/.test(p) || p.startsWith('\\\\')
+/** 通过 working_directory 等工具跟踪到的当前工作目录（启发式，所有会话共用）。 */
+let trackedCwd
+
+function currentBase(state) {
+  return state.relativeBase ?? trackedCwd
 }
 
-function normalizeLower(value) {
-  try {
-    return String(value).replace(/[\\/]+/g, '\\').replace(/\\+$/, '').toLowerCase()
-  } catch {
-    return ''
+/** 遍历参数里的所有字符串（数组元素沿用父级的参数名），限制深度防止恶意嵌套。 */
+function walk(value, key, depth, visit) {
+  if (depth > 8) return
+  if (typeof value === 'string') {
+    if (key !== undefined) visit(key, value)
+  } else if (Array.isArray(value)) {
+    for (const item of value) walk(item, key, depth + 1, visit)
+  } else if (value !== null && typeof value === 'object') {
+    for (const [k, v] of Object.entries(value)) walk(v, k, depth + 1, visit)
   }
-}
-
-function isUnder(normalizedPath, root) {
-  if (normalizedPath === '' || root === '') return false
-  return normalizedPath === root || normalizedPath.startsWith(root + '\\')
-}
-
-/** 命令串里是否真的出现了某个根（避免 "d:" 命中 "d:x" 这类误报）。 */
-function mentionsRoot(command, root) {
-  const at = command.indexOf(root)
-  if (at < 0) return false
-  const next = command[at + root.length]
-  return next === undefined || next === '\\'
 }
 
 /**
- * 判定一个路径是否越界：黑名单 > 白名单 > 受管根。
- * @returns 越界的绝对路径；允许或无法判定时返回 undefined。
+ * 收集一次工具调用里所有越界的路径。
+ * - pathKeys 里的参数：整体当作路径解析后判定
+ * - scanKeys 里的参数：提取"像绝对路径"的片段逐个判定（glob 模式、shell 命令）
  */
-function violation(raw, state) {
-  if (typeof raw !== 'string') return undefined
-  const p = raw.trim()
-  if (p === '') return undefined
-
-  let target
-  if (isAbsolutePath(p)) {
-    target = p
-  } else if (p.split(/[\\/]/).includes('..') && state.relativeBase !== undefined) {
-    target = resolve(state.relativeBase, p)
-  } else {
-    return undefined
-  }
-
-  const norm = normalizeLower(target)
-  if (state.denyRoots.some((root) => isUnder(norm, root))) return target
-  if (state.allowRoots.some((root) => isUnder(norm, root))) return undefined
-  if (state.enforceRoots.some((root) => isUnder(norm, root))) return target
-  return undefined
-}
-
-function collect(exec, state) {
+export function collect(exec, state, resolveReal) {
   const args = exec.arguments
   if (args === null || typeof args !== 'object') return []
-  const found = []
+  const base = currentBase(state)
+  const isShell = state.shellTools.includes(exec.name)
+  const found = new Set()
 
-  for (const key of state.pathKeys) {
-    const value = args[key]
-    if (typeof value === 'string') {
-      const bad = violation(value, state)
-      if (bad !== undefined) found.push(bad)
-    } else if (Array.isArray(value)) {
-      for (const item of value) {
-        const bad = violation(item, state)
-        if (bad !== undefined) found.push(bad)
-      }
-    }
+  const check = (raw) => {
+    const abs = toWindowsAbsolute(raw, base)
+    if (abs === undefined) return
+    const bad = classify(abs, state, resolveReal)
+    if (bad !== undefined) found.add(bad)
   }
 
-  // shell 启发式：命令串里出现受管根字样时要求确认（无法静态拆解任意代码）
-  if (state.scanShell && exec.name === 'pwsh' && typeof args.command === 'string') {
-    const command = args.command.toLowerCase()
-    const explicitlyAllowed = state.allowRoots.some((root) => mentionsRoot(command, root))
-    if (!explicitlyAllowed) {
-      for (const root of state.enforceRoots) {
-        if (mentionsRoot(command, root)) {
-          found.push(`shell mentions ${root}`)
-          break
-        }
-      }
+  walk(args, undefined, 0, (key, value) => {
+    if (state.pathKeys.includes(key)) {
+      check(value)
+    } else if (state.scanKeys.includes(key) && (!isShell || state.scanShell)) {
+      for (const match of value.matchAll(PATH_LIKE)) check(match[0])
     }
-  }
+  })
 
-  return [...new Set(found)]
+  return [...found]
 }
+
+/** 放行（或交给用户审批）的切目录调用，更新相对路径基准。被拒绝的不更新。 */
+function track(exec, state, decision) {
+  if (decision && decision.kind === 'deny') return
+  if (!state.cwdTools.includes(exec.name)) return
+  const args = exec.arguments
+  if (args === null || typeof args !== 'object') return
+  for (const key of ['cd', 'path', 'workdir', 'directory']) {
+    const abs = toWindowsAbsolute(args[key], currentBase(state))
+    if (abs !== undefined) {
+      trackedCwd = abs
+      return
+    }
+  }
+}
+
+/** 测试用：重置跟踪到的工作目录和提醒节流。 */
+export function _resetForTest() {
+  trackedCwd = undefined
+  lastAlertAt = 0
+}
+
+let lastAlertAt = 0
 
 /** 触发提醒：声音 / 自定义通知窗 / 确认弹窗，三者各自独立进程，互不耦合。 */
 function raiseAlert(state, toolName, detail) {
@@ -122,6 +109,13 @@ function raiseAlert(state, toolName, detail) {
   const wantToast = state.alertToast === true
   const wantPopup = state.alertPopup !== false
   if (!wantSound && !wantCustom && !wantToast && !wantPopup) return
+
+  const now = Date.now()
+  if (now - lastAlertAt < state.alertCooldownMs) {
+    logAlert('throttled tool=' + toolName + ' detail=' + detail)
+    return
+  }
+  lastAlertAt = now
 
   const escape = (text) => String(text).replace(/'/g, "''")
   const message = escape('「' + toolName + '」想访问 ' + detail)
@@ -251,11 +245,19 @@ export function apply(ctx, config) {
     try {
       state = loadState(config)
       found = collect(exec, state)
-    } catch {
-      // 守卫自身出错时不阻断正常调用
+    } catch (error) {
+      logAlert('guard error: ' + String(error && error.message))
+      if (state !== undefined && state.failClosed) {
+        return { kind: 'deny', reason: 'prevent-peep: guard error, blocked because failClosed is on' }
+      }
+      // 守卫自身出错时默认不阻断正常调用
       return next()
     }
-    if (found.length === 0) return next()
+    if (found.length === 0) {
+      const decision = await next()
+      track(exec, state, decision)
+      return decision
+    }
 
     const detail = found.join(', ')
     raiseAlert(state, exec.name, detail)
@@ -265,6 +267,8 @@ export function apply(ctx, config) {
       return { kind: 'deny', reason }
     }
 
+    // 用户可能批准，按"已切换"处理：判错了只会多问，不会漏放
+    track(exec, state, { kind: 'ask' })
     return {
       kind: 'ask',
       reason,

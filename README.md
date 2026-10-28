@@ -56,7 +56,8 @@ Restart DSH once afterwards 🔄
 
 ## 🎛️ Using it
 
-Double-click `plugin/大肥鱼我真该控制你了！.cmd` and poke around.
+Double-click `plugin/大肥鱼我真该控制你了！.cmd` and poke around. The lists start
+empty, so the guard does nothing until you pick at least one enforced root.
 
 Settings live in `%USERPROFILE%\.dsh\prevent-peep.json`:
 
@@ -70,7 +71,8 @@ Settings live in `%USERPROFILE%\.dsh\prevent-peep.json`:
   "alertSound": true,
   "alertCustom": true,
   "alertToast": false,
-  "alertPopup": true
+  "alertPopup": true,
+  "relativeBase": "C:\\Users\\TE\\Documents\\deepseek-harness\\default-workspace"
 }
 ```
 
@@ -80,24 +82,44 @@ Settings live in `%USERPROFILE%\.dsh\prevent-peep.json`:
 | `allowRoots` | always allowed |
 | `denyRoots` | always questioned (highest priority) |
 | `enforceRoots` | only paths here are policed |
-| `scanShell` | also scan `pwsh` command strings for enforced roots |
+| `scanShell` | also scan shell command strings for path-like fragments |
+| `relativeBase` | base for relative paths (falls back to the last `working_directory`) |
 | `alertSound` | 🔔 one short ding |
 | `alertCustom` | 🪟 silent self-drawn notification |
 | `alertToast` | 💬 native Windows balloon (brings its own sound) |
 | `alertPopup` | ⚠️ modal confirmation |
 
-Resolution order: **deny → allow → enforced root**.
+Resolution order: **deny → allow → enforced root**. Paths are fully resolved
+first (`..`, `\\?\`, `\\localhost\D$`, `D:foo`, `/` vs `\`, letter case), and on
+Windows symlinks / junctions / 8.3 short names are followed too — if either the
+literal or the real path is out of bounds, it's out of bounds.
+
+Advanced keys (not in the window, but the window keeps them when you save):
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `failClosed` | `false` | if the guard itself crashes: `false` lets the call through, `true` blocks it |
+| `alertCooldownMs` | `5000` | minimum gap between alerts, so a looping agent can't flood your screen |
+| `pathKeys` | `file_path`, `path`, `paths`, `workdir`, `cd`, … | arguments treated as a whole path |
+| `scanKeys` | `pattern`, `glob`, `include`, `exclude`, `command` | arguments searched for absolute-path fragments |
+| `shellTools` | `pwsh`, `powershell`, `bash`, `sh`, `shell`, `cmd` | tools whose `command` is governed by `scanShell` |
+| `cwdTools` | `working_directory` | tools whose target becomes the relative-path base |
 
 ## 👀 What it watches
 
-`read`, `write`, `edit`, `glob`, `grep`, `read_image`, `present`,
-`working_directory`, plus the `workdir` argument of `pwsh`.
+Any tool call whose arguments carry a path in `pathKeys`, or an absolute path
+inside `scanKeys` — in practice `read`, `write`, `edit`, `glob` (including the
+`pattern`), `grep`, `read_image`, `present`, `working_directory`, and `pwsh`
+(both `workdir` and the command itself). File *contents* you ask it to write are
+never scanned.
 
 ## 🧠 Honest limits
 
-- 🪄 The `pwsh` scan is a **heuristic**: literal match on enforced roots, easy to
-  dodge with string concatenation
-- 📐 Relative paths are only evaluated when they contain `..`
+- 🪄 The shell scan is a **heuristic**: it pulls path-looking fragments out of the
+  command. String concatenation, environment variables, or `cd D:` followed by a
+  relative path in a later command still get past it
+- 📐 Relative paths need a base: `relativeBase`, or the last `working_directory`
+  the guard saw (shared across sessions). With neither, they can't be judged
 - 🎨 The window background and avatar are crops of an AI-generated illustration —
   swap them out if you redistribute this
 
