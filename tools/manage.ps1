@@ -492,9 +492,9 @@ $modeBox.SelectedIndex = if ($state.mode -eq 'deny') { 1 } else { 0 }
 $form.Controls.Add($modeBox)
 
 $scanBox = New-Toggle $form '扫描 pwsh 命令串（启发式）' 620 560 ([bool]$state.scanShell)
-$soundBox = New-Toggle $form '触发时播放提示音' 620 586 ([bool]$state.alertSound)
-$toastBox = New-Toggle $form '触发时弹出托盘气泡' 620 612 ([bool]$state.alertToast)
-$popupBox = New-Toggle $form '触发时弹窗（需点确认）' 620 638 ([bool]$state.alertPopup)
+$soundBox = New-Toggle $form '声音提醒' 620 586 ([bool]$state.alertSound)
+$toastBox = New-Toggle $form '弹窗提醒（托盘气泡）' 620 612 ([bool]$state.alertToast)
+$popupBox = New-Toggle $form '确认弹窗提醒' 620 638 ([bool]$state.alertPopup)
 
 $null = New-Label $form '相对路径基准（可选）' 620 668 260 22 9 $C_MUTED $false
 $baseBox = New-Object System.Windows.Forms.TextBox
