@@ -1,6 +1,6 @@
 # 🐟 Prevent-peep
 
-[English](README.md) | [简体中文](README.zh.md)
+[English](README.md) | [简体中文](README.zh.md) | [Changelog](CHANGELOG.md)
 
 [![DeepSeek Harness Plugin](https://deepseekharnessplugins.com/api/badge/0352FL/prevent-peep)](https://deepseekharnessplugins.com/plugins/0352FL/prevent-peep)
 
