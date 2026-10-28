@@ -307,6 +307,58 @@ function New-ListBox($parent, $x, $y, $w, $h) {
     return $list
 }
 
+function New-Toggle($parent, $text, $x, $y, [bool]$checked) {
+    $row = New-Object System.Windows.Forms.Panel
+    $row.Location = New-Object System.Drawing.Point($x, $y)
+    $row.Size = New-Object System.Drawing.Size(272, 26)
+    $row.BackColor = [System.Drawing.Color]::Transparent
+    $row.Cursor = [System.Windows.Forms.Cursors]::Hand
+    $row.Tag = $checked
+
+    $label = New-Object System.Windows.Forms.Label
+    $label.Text = $text
+    $label.Location = New-Object System.Drawing.Point(50, 3)
+    $label.Size = New-Object System.Drawing.Size(218, 20)
+    $label.ForeColor = $C_TEXT
+    $label.Font = New-Object System.Drawing.Font($fontName, 9)
+    $label.BackColor = [System.Drawing.Color]::Transparent
+    $label.Cursor = [System.Windows.Forms.Cursors]::Hand
+    $row.Controls.Add($label)
+
+    $track = New-Object System.Windows.Forms.Panel
+    $track.Location = New-Object System.Drawing.Point(0, 2)
+    $track.Size = New-Object System.Drawing.Size(42, 22)
+    $track.BackColor = [System.Drawing.Color]::Transparent
+    $track.Cursor = [System.Windows.Forms.Cursors]::Hand
+    $row.Controls.Add($track)
+
+    $paint = {
+        param($sender)
+        $on = [bool]$row.Tag
+        $g = $sender.CreateGraphics()
+        $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+        $trackColor = if ($on) { $C_ACCENT } else { [System.Drawing.ColorTranslator]::FromHtml('#CFD7E6') }
+        $path = New-RoundedPath 41 21 10.5
+        $brush = New-Object System.Drawing.SolidBrush $trackColor
+        $g.FillPath($brush, $path)
+        $brush.Dispose()
+        $path.Dispose()
+        $knobX = if ($on) { 20 } else { 2 }
+        $knob = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::White)
+        $g.FillEllipse($knob, $knobX, 2.5, 16, 16)
+        $knob.Dispose()
+        $g.Dispose()
+    }
+    $track.Add_Paint($paint)
+    $track.Add_Click({ $row.Tag = -not [bool]$row.Tag; $track.Invalidate() })
+    $label.Add_Click({ $row.Tag = -not [bool]$row.Tag; $track.Invalidate() })
+    $row.Add_Click({ $row.Tag = -not [bool]$row.Tag; $track.Invalidate() })
+
+    $row | Add-Member -NotePropertyName Track -NotePropertyValue $track -Force
+    $row | Add-Member -NotePropertyName Repaint -NotePropertyValue { $track.Invalidate() } -Force
+    $parent.Controls.Add($row)
+    return $row
+}
 function Add-Folder($listBox, $title) {
     $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
     $dialog.Description = $title
@@ -449,35 +501,9 @@ $modeBox.Font = New-Object System.Drawing.Font($fontName, 9)
 $modeBox.SelectedIndex = if ($state.mode -eq 'deny') { 1 } else { 0 }
 $form.Controls.Add($modeBox)
 
-$scanBox = New-Object System.Windows.Forms.CheckBox
-$scanBox.Text = '扫描 pwsh 命令串（启发式）'
-$scanBox.Location = New-Object System.Drawing.Point(620, 570)
-$scanBox.Size = New-Object System.Drawing.Size(260, 26)
-$scanBox.ForeColor = $C_TEXT
-$scanBox.Font = New-Object System.Drawing.Font($fontName, 9)
-$scanBox.BackColor = [System.Drawing.Color]::Transparent
-$scanBox.Checked = [bool]$state.scanShell
-$form.Controls.Add($scanBox)
-
-$soundBox = New-Object System.Windows.Forms.CheckBox
-$soundBox.Text = '触发时播放提示音'
-$soundBox.Location = New-Object System.Drawing.Point(620, 594)
-$soundBox.Size = New-Object System.Drawing.Size(260, 24)
-$soundBox.ForeColor = $C_TEXT
-$soundBox.Font = New-Object System.Drawing.Font($fontName, 9)
-$soundBox.BackColor = [System.Drawing.Color]::Transparent
-$soundBox.Checked = [bool]$state.alertSound
-$form.Controls.Add($soundBox)
-
-$toastBox = New-Object System.Windows.Forms.CheckBox
-$toastBox.Text = '触发时弹出 Windows 托盘通知'
-$toastBox.Location = New-Object System.Drawing.Point(620, 618)
-$toastBox.Size = New-Object System.Drawing.Size(272, 24)
-$toastBox.ForeColor = $C_TEXT
-$toastBox.Font = New-Object System.Drawing.Font($fontName, 9)
-$toastBox.BackColor = [System.Drawing.Color]::Transparent
-$toastBox.Checked = [bool]$state.alertToast
-$form.Controls.Add($toastBox)
+$scanBox = New-Toggle $form '扫描 pwsh 命令串（启发式）' 620 566 ([bool]$state.scanShell)
+$soundBox = New-Toggle $form '触发时播放提示音' 620 594 ([bool]$state.alertSound)
+$toastBox = New-Toggle $form '触发时弹出 Windows 托盘通知' 620 622 ([bool]$state.alertToast)
 
 $null = New-Label $form '相对路径基准（可选）' 620 650 260 22 9 $C_MUTED $false
 $baseBox = New-Object System.Windows.Forms.TextBox
@@ -518,9 +544,9 @@ $saveButton.Add_Click({
         enforceRoots = @($enforceList.Items | ForEach-Object { [string]$_ })
         allowRoots   = @($allowList.Items | ForEach-Object { [string]$_ })
         denyRoots    = @($denyList.Items | ForEach-Object { [string]$_ })
-        scanShell    = [bool]$scanBox.Checked
-        alertSound   = [bool]$soundBox.Checked
-        alertToast   = [bool]$toastBox.Checked
+        scanShell    = [bool]$scanBox.Tag
+        alertSound   = [bool]$soundBox.Tag
+        alertToast   = [bool]$toastBox.Tag
         relativeBase = [string]$baseBox.Text
     }
     try {
