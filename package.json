@@ -1,0 +1,46 @@
+{
+  "name": "prevent-peep",
+  "version": "0.1.0",
+  "description": "Ask or deny before DSH file tools touch paths outside your allowlist. Ships a folder picker to manage global allow/deny lists.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "icon": "./icon.svg",
+  "files": [
+    "lib",
+    "locale",
+    "tools",
+    "cordis.patch.yml",
+    "大肥鱼我真该控制你了！.cmd",
+    "icon.svg",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "guard",
+    "privacy",
+    "allowlist",
+    "sandbox"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "test": "node test/guard.test.mjs"
+  }
+}

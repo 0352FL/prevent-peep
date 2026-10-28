@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Prevent-peep",
+    "description": "Ask or deny before DSH file tools touch paths outside your allowlist. Ships a folder picker to manage global allow/deny lists."
+  }
+}
