@@ -8,6 +8,7 @@ if ($env:DSH_HOME) { $stateDir = $env:DSH_HOME } else { $stateDir = Join-Path $e
 $statePath = Join-Path $stateDir 'prevent-peep.json'
 $assetsDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'assets'
 $bgPath = Join-Path $assetsDir 'background.jpg'
+$avatarPath = Join-Path $assetsDir 'avatar.png'
 
 function Get-Defaults {
     return [ordered]@{
@@ -53,17 +54,32 @@ function Write-State($state) {
 # ---------- 配色 ----------
 $C_BG      = [System.Drawing.ColorTranslator]::FromHtml('#F5F7FF')
 $C_CARD    = [System.Drawing.Color]::White
-$C_BORDER  = [System.Drawing.ColorTranslator]::FromHtml('#E1E7F5')
+$C_BORDER  = [System.Drawing.ColorTranslator]::FromHtml('#DCE6F8')
 $C_TEXT    = [System.Drawing.ColorTranslator]::FromHtml('#1B2A4A')
 $C_MUTED   = [System.Drawing.ColorTranslator]::FromHtml('#5F7191')
 $C_ACCENT  = [System.Drawing.ColorTranslator]::FromHtml('#5C8DF6')
 $C_ACCENT2 = [System.Drawing.ColorTranslator]::FromHtml('#3F72E0')
 $C_PINK    = [System.Drawing.ColorTranslator]::FromHtml('#F58BB0')
 $C_LINE    = [System.Drawing.ColorTranslator]::FromHtml('#D6DEF0')
+$C_HEADER  = [System.Drawing.ColorTranslator]::FromHtml('#DCE9FF')
+$C_HEADER2 = [System.Drawing.ColorTranslator]::FromHtml('#2C4470')
 $C_FIELD   = [System.Drawing.Color]::White
 
 $fontName = 'Microsoft YaHei UI'
 try { $null = New-Object System.Drawing.Font($fontName, 9) } catch { $fontName = 'Segoe UI' }
+
+# ---------- 拖动窗口（无边框） ----------
+$dragReady = $true
+try {
+    Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class PeepDrag {
+    [DllImport("user32.dll")] public static extern bool ReleaseCapture();
+    [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+}
+"@ -ErrorAction Stop
+} catch { $dragReady = $false }
 
 # ---------- 图形工具 ----------
 function New-RoundedPath([int]$w, [int]$h, [int]$r) {
@@ -75,6 +91,19 @@ function New-RoundedPath([int]$w, [int]$h, [int]$r) {
     $path.AddArc($w - $d, 0, $d, $d, 270, 90)
     $path.AddArc($w - $d, $h - $d, $d, $d, 0, 90)
     $path.AddArc(0, $h - $d, $d, $d, 90, 90)
+    $path.CloseFigure()
+    return $path
+}
+
+function New-TopRoundedPath([int]$w, [int]$h, [int]$r) {
+    $path = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $d = [Math]::Max(1, $r * 2)
+    if ($d -gt $w) { $d = $w }
+    if ($d -gt $h) { $d = $h }
+    $path.AddArc(0, 0, $d, $d, 180, 90)
+    $path.AddArc($w - $d, 0, $d, $d, 270, 90)
+    $path.AddLine($w, $r * 2, $w, $h)
+    $path.AddLine($w, $h, 0, $h)
     $path.CloseFigure()
     return $path
 }
@@ -95,8 +124,7 @@ function Get-SoftBackdrop([string]$path, [int]$w, [int]$h) {
     }
     $srcRect = New-Object System.Drawing.Rectangle($sx, $sy, $sw, $sh)
 
-    # 缩小再放大 = 柔和虚化
-    $small = New-Object System.Drawing.Bitmap([Math]::Max(2, [int]($w / 10)), [Math]::Max(2, [int]($h / 10)))
+    $small = New-Object System.Drawing.Bitmap([Math]::Max(2, [int]($w / 12)), [Math]::Max(2, [int]($h / 12)))
     $g1 = [System.Drawing.Graphics]::FromImage($small)
     $g1.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
     $g1.DrawImage($src, (New-Object System.Drawing.Rectangle(0, 0, $small.Width, $small.Height)), $srcRect, [System.Drawing.GraphicsUnit]::Pixel)
@@ -107,15 +135,26 @@ function Get-SoftBackdrop([string]$path, [int]$w, [int]$h) {
     $g2.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
     $g2.DrawImage($small, 0, 0, $w, $h)
 
-    # 白纱：顶部更浓，底部留一点颜色
+    # 整体薄纱：够透能看清图，又压住杂色
     $rect = New-Object System.Drawing.Rectangle(0, 0, $w, $h)
-    $brush = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
+    $veil = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
         $rect,
-        [System.Drawing.Color]::FromArgb(240, 255, 255, 255),
-        [System.Drawing.Color]::FromArgb(214, 246, 250, 255),
+        [System.Drawing.Color]::FromArgb(150, 255, 255, 255),
+        [System.Drawing.Color]::FromArgb(120, 255, 255, 255),
         90)
-    $g2.FillRectangle($brush, $rect)
-    $brush.Dispose()
+    $g2.FillRectangle($veil, $rect)
+    $veil.Dispose()
+
+    # 顶部标题区再压一层，保证字清楚
+    $topRect = New-Object System.Drawing.Rectangle(0, 0, $w, 150)
+    $topVeil = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
+        $topRect,
+        [System.Drawing.Color]::FromArgb(235, 255, 255, 255),
+        [System.Drawing.Color]::FromArgb(150, 255, 255, 255),
+        90)
+    $g2.FillRectangle($topVeil, $topRect)
+    $topVeil.Dispose()
+
     $g2.Dispose()
     $small.Dispose()
     $src.Dispose()
@@ -127,16 +166,14 @@ function Get-Avatar([string]$path, [int]$size) {
     $bytes = [System.IO.File]::ReadAllBytes($path)
     $ms = New-Object System.IO.MemoryStream(,$bytes)
     $src = [System.Drawing.Image]::FromStream($ms)
-    $side = [Math]::Min($src.Width, $src.Height)
-    $sx = [int](($src.Width - $side) * 0.40)
-    $sy = [int](($src.Height - $side) * 0.10)
     $bmp = New-Object System.Drawing.Bitmap($size, $size)
     $g = [System.Drawing.Graphics]::FromImage($bmp)
     $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
     $clip = New-Object System.Drawing.Drawing2D.GraphicsPath
     $clip.AddEllipse(0, 0, $size - 1, $size - 1)
     $g.SetClip($clip)
-    $g.DrawImage($src, (New-Object System.Drawing.Rectangle(0, 0, $size, $size)), (New-Object System.Drawing.Rectangle($sx, $sy, $side, $side)), [System.Drawing.GraphicsUnit]::Pixel)
+    $g.DrawImage($src, (New-Object System.Drawing.Rectangle(0, 0, $size, $size)))
     $g.ResetClip()
     $ring = New-Object System.Drawing.Pen([System.Drawing.Color]::White, 3)
     $g.DrawEllipse($ring, 2, 2, $size - 5, $size - 5)
@@ -239,12 +276,22 @@ $state = Read-State
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'Prevent-peep — 大肥鱼安全助手'
-$form.ClientSize = New-Object System.Drawing.Size(920, 720)
+$form.ClientSize = New-Object System.Drawing.Size(920, 774)
 $form.StartPosition = 'CenterScreen'
 $form.BackColor = $C_BG
 $form.Font = New-Object System.Drawing.Font($fontName, 9)
-$form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedSingle
+$form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::None
 $form.MaximizeBox = $false
+$form.KeyPreview = $true
+$form.Region = New-Object System.Drawing.Region -ArgumentList (New-RoundedPath 920 774 18)
+$form.Add_Paint({
+    param($sender, $e)
+    $pen = New-Object System.Drawing.Pen ([System.Drawing.ColorTranslator]::FromHtml('#C9D8F2')), 1
+    $g = New-RoundedPath ($sender.Width - 1) ($sender.Height - 1) 18
+    $e.Graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    $e.Graphics.DrawPath($pen, $g)
+    $pen.Dispose(); $g.Dispose()
+})
 
 if (Test-Path -LiteralPath $bgPath) {
     try {
@@ -255,54 +302,89 @@ if (Test-Path -LiteralPath $bgPath) {
     }
 }
 
-# 顶部
-$null = New-Label $form 'Prevent-peep' 26 16 300 32 17 $C_TEXT $true
+# ---------- 自定义标题栏 ----------
+$header = New-Object System.Windows.Forms.Panel
+$header.Location = New-Object System.Drawing.Point(0, 0)
+$header.Size = New-Object System.Drawing.Size(920, 44)
+$header.BackColor = $C_HEADER
+$header.Region = New-Object System.Drawing.Region -ArgumentList (New-TopRoundedPath 920 44 18)
+$form.Controls.Add($header)
+
+$null = New-Label $header 'Prevent-peep · 大肥鱼安全助手' 20 12 400 24 11 $C_HEADER2 $true
+
+$closeBtn = New-Object System.Windows.Forms.Button
+$closeBtn.Text = '✕'
+$closeBtn.Location = New-Object System.Drawing.Point(872, 9)
+$closeBtn.Size = New-Object System.Drawing.Size(34, 26)
+$closeBtn.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+$closeBtn.FlatAppearance.BorderSize = 0
+$closeBtn.FlatAppearance.MouseOverBackColor = $C_PINK
+$closeBtn.FlatAppearance.MouseDownBackColor = [System.Drawing.ColorTranslator]::FromHtml('#E2648C')
+$closeBtn.BackColor = $C_HEADER
+$closeBtn.ForeColor = $C_HEADER2
+$closeBtn.Font = New-Object System.Drawing.Font($fontName, 10)
+$closeBtn.Cursor = [System.Windows.Forms.Cursors]::Hand
+$header.Controls.Add($closeBtn)
+$closeBtn.Add_Click({ $form.Close() })
+
+if ($dragReady) {
+    $dragHandler = {
+        try {
+            [PeepDrag]::ReleaseCapture() | Out-Null
+            [PeepDrag]::SendMessage($form.Handle, 0xA1, [IntPtr]2, [IntPtr]::Zero) | Out-Null
+        } catch { }
+    }
+    $header.Add_MouseDown($dragHandler)
+    foreach ($child in $header.Controls) {
+        if ($child -is [System.Windows.Forms.Label]) { $child.Add_MouseDown($dragHandler) }
+    }
+}
+
+# ---------- 头部信息 ----------
+$null = New-Label $form '文件访问守卫' 26 62 300 30 16 $C_TEXT $true
 $accentBar = New-Object System.Windows.Forms.Panel
-$accentBar.Location = New-Object System.Drawing.Point(28, 54)
+$accentBar.Location = New-Object System.Drawing.Point(28, 96)
 $accentBar.Size = New-Object System.Drawing.Size(38, 4)
 $accentBar.BackColor = $C_PINK
 $form.Controls.Add($accentBar)
-$null = New-Label $form '大肥鱼安全助手 · 文件访问守卫' 26 64 460 22 9.5 $C_MUTED $false
-$null = New-Label $form ("保存后 1 秒内生效，无需重启　·　" + $statePath) 26 88 720 20 8.5 $C_MUTED $false
+$null = New-Label $form '大肥鱼在盯着你的文件夹，别乱翻哦' 26 106 470 22 9.5 $C_MUTED $false
+$null = New-Label $form ("保存后 1 秒内生效，无需重启　·　" + $statePath) 26 130 700 20 8.5 $C_MUTED $false
 
-if (Test-Path -LiteralPath $bgPath) {
+if (Test-Path -LiteralPath $avatarPath) {
     try {
         $avatar = New-Object System.Windows.Forms.PictureBox
-        $avatar.Image = Get-Avatar $bgPath 66
+        $avatar.Image = Get-Avatar $avatarPath 68
         $avatar.SizeMode = [System.Windows.Forms.PictureBoxSizeMode]::StretchImage
-        $avatar.Size = New-Object System.Drawing.Size(66, 66)
-        $avatar.Location = New-Object System.Drawing.Point(830, 20)
+        $avatar.Size = New-Object System.Drawing.Size(68, 68)
+        $avatar.Location = New-Object System.Drawing.Point(828, 56)
         $avatar.BackColor = [System.Drawing.Color]::Transparent
         $form.Controls.Add($avatar)
     } catch { }
 }
 
-# 白名单
-$allowCard = Add-RoundedCard $form 20 122 430 300
+# ---------- 卡片 ----------
+$allowCard = Add-RoundedCard $form 20 164 430 300
 $null = New-Label $allowCard '白名单 · 永远允许' 20 16 380 24 11 $C_TEXT $true
 $null = New-Label $allowCard '这些目录及其子目录不会被拦截' 20 42 380 20 8.5 $C_MUTED $false
 $allowList = New-ListBox $allowCard 20 68 390 172
 $allowAdd = New-Button $allowCard '＋ 添加文件夹' 20 250 150 34 $true
 $allowRemove = New-Button $allowCard '移除所选' 182 250 110 34 $false
 
-# 黑名单
-$denyCard = Add-RoundedCard $form 470 122 430 300
+$denyCard = Add-RoundedCard $form 470 164 430 300
 $null = New-Label $denyCard '黑名单 · 永远检查' 20 16 380 24 11 $C_TEXT $true
 $null = New-Label $denyCard '优先级最高，覆盖白名单与受管根' 20 42 380 20 8.5 $C_MUTED $false
 $denyList = New-ListBox $denyCard 20 68 390 172
 $denyAdd = New-Button $denyCard '＋ 添加文件夹' 20 250 150 34 $true
 $denyRemove = New-Button $denyCard '移除所选' 182 250 110 34 $false
 
-# 受管根
-$enforceCard = Add-RoundedCard $form 20 438 560 250
+$enforceCard = Add-RoundedCard $form 20 480 560 250
 $null = New-Label $enforceCard '受管根 · 检查范围' 20 16 480 24 11 $C_TEXT $true
 $null = New-Label $enforceCard '只有落在这些目录下的路径才会被检查' 20 42 480 20 8.5 $C_MUTED $false
 $enforceList = New-ListBox $enforceCard 20 68 520 120
 $enforceAdd = New-Button $enforceCard '＋ 添加文件夹' 20 198 150 34 $false
 $enforceRemove = New-Button $enforceCard '移除所选' 182 198 110 34 $false
 
-# 行为
-$optionCard = Add-RoundedCard $form 600 438 300 250
+$optionCard = Add-RoundedCard $form 600 480 300 250
 $null = New-Label $optionCard '行为' 20 16 260 24 11 $C_TEXT $true
 $null = New-Label $optionCard '命中时' 20 52 70 24 9 $C_MUTED $false
 
@@ -337,11 +419,11 @@ $optionCard.Controls.Add($baseBox)
 
 $openButton = New-Button $optionCard '打开配置文件' 20 192 140 34 $false
 
-# 底部
-$null = New-Label $form '提示：黑名单优先于白名单；受管根之外的路径不受检查。' 26 700 470 20 8.5 $C_MUTED $false
-$statusLabel = New-Label $form '' 500 700 190 20 8.5 $C_ACCENT $false
-$saveButton = New-Button $form '保存' 700 690 90 34 $true
-$closeButton = New-Button $form '关闭' 800 690 90 34 $false
+# ---------- 底部 ----------
+$hintLabel = New-Label $form '提示：黑名单优先于白名单；受管根之外的路径不受检查。' 26 748 470 20 8.5 $C_MUTED $false
+$statusLabel = New-Label $form '' 500 748 190 20 8.5 $C_ACCENT $false
+$saveButton = New-Button $form '保存' 700 738 90 34 $true
+$closeButton = New-Button $form '关闭' 800 738 90 34 $false
 
 # ---------- 事件 ----------
 $allowAdd.Add_Click({ Add-Folder $allowList '选择要加入白名单的文件夹（永远允许）' })
@@ -377,6 +459,7 @@ $saveButton.Add_Click({
 })
 
 $closeButton.Add_Click({ $form.Close() })
+$form.Add_KeyDown({ param($sender, $e) if ($e.KeyCode -eq 'Escape') { $form.Close() } })
 
 foreach ($item in @($state.allowRoots)) { if ($item) { [void]$allowList.Items.Add([string]$item) } }
 foreach ($item in @($state.denyRoots)) { if ($item) { [void]$denyList.Items.Add([string]$item) } }
