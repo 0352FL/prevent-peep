@@ -6,7 +6,7 @@
 
 > 🐟 When the big fat fish goes wandering, don't let it see what it shouldn't —
 > and please don't let it upload any of it.
-> 😏 Bonus: stops Liang Sheng from roasting your XP choices.
+> 😏 Bonus: stops Holy Liang from roasting your XP choices.
 
 A pair of blinkers for **DeepSeek Harness**. Every time the agent wants to touch a
 file, it hits a gate first — and you decide whether it gets through.
